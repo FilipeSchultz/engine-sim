@@ -19,6 +19,11 @@ class Dynamometer : public atg_scs::Constraint {
         double m_kd;
         double m_maxTorque;
 
+        // Torque mode: brakes the crankshaft with a constant torque
+        // (m_torqueSetpoint) instead of holding m_rotationSpeed
+        double m_torqueSetpoint;
+        bool m_torqueMode;
+
         bool m_hold;
         bool m_enabled;
 };

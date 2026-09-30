@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.10)
 option(DTV "Enable video output" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
 option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
+option(CAN_ENABLED "Enable CAN bus control (Kvaser CANlib)" OFF)
+set(CANLIB_DIR "C:/Program Files (x86)/Kvaser/Canlib" CACHE PATH "Kvaser CANlib SDK directory")
 
 if (DTV)
     add_compile_definitions(ATG_ENGINE_SIM_VIDEO_CAPTURE)
@@ -15,6 +17,10 @@ endif (PIRANHA_ENABLED)
 if (DISCORD_ENABLED)
     add_compile_definitions(ATG_ENGINE_SIM_DISCORD_ENABLED)
 endif (DISCORD_ENABLED)
+
+if (CAN_ENABLED)
+    add_compile_definitions(ATG_ENGINE_SIM_CAN_ENABLED)
+endif (CAN_ENABLED)
 
 # Enable group projects in folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -237,6 +243,8 @@ add_executable(engine-sim-app WIN32
     src/load_simulation_cluster.cpp
     src/mixer_cluster.cpp
     src/info_cluster.cpp
+    src/can_interface.cpp
+    src/avl_emcon.cpp
 
     # Include files
     include/delta.h
@@ -272,6 +280,8 @@ add_executable(engine-sim-app WIN32
     include/load_simulation_cluster.h
     include/mixer_cluster.h
     include/info_cluster.h
+    include/can_interface.h
+    include/avl_emcon.h
 )
 
 target_link_libraries(engine-sim-app
@@ -295,6 +305,35 @@ if (DISCORD_ENABLED)
     	discord
 	discord-rpc)
 endif (DISCORD_ENABLED)
+
+if (CAN_ENABLED)
+    if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(CANLIB_LIB_SUBDIR x64)
+    else()
+        set(CANLIB_LIB_SUBDIR MS)
+    endif()
+
+    find_path(CANLIB_INCLUDE_DIR canlib.h
+        PATHS ${CANLIB_DIR}/INC
+        NO_DEFAULT_PATH)
+    find_library(CANLIB_LIBRARY canlib32
+        PATHS ${CANLIB_DIR}/Lib/${CANLIB_LIB_SUBDIR}
+        NO_DEFAULT_PATH)
+
+    if (NOT CANLIB_INCLUDE_DIR OR NOT CANLIB_LIBRARY)
+        message(FATAL_ERROR
+            "Kvaser CANlib SDK not found in '${CANLIB_DIR}'. "
+            "Install the CANlib SDK or set -DCANLIB_DIR=<path>.")
+    endif()
+
+    add_library(canlib STATIC IMPORTED)
+    set_target_properties(canlib PROPERTIES
+        IMPORTED_LOCATION ${CANLIB_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES ${CANLIB_INCLUDE_DIR})
+
+    target_link_libraries(engine-sim-app
+        canlib)
+endif (CAN_ENABLED)
 
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)

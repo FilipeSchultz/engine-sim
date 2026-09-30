@@ -1,0 +1,136 @@
+VERSION ""
+
+NS_ :
+  NS_DESC_
+  CM_
+  BA_DEF_
+  BA_
+  VAL_
+  CAT_DEF_
+  CAT_
+  FILTER
+  BA_DEF_DEF_
+  EV_DATA_
+  ENVVAR_DATA_
+  SGTYPE_
+  SGTYPE_VAL_
+  BA_DEF_SGTYPE_
+  BA_SGTYPE_
+  SIG_TYPE_REF_
+  VAL_TABLE_
+  SIG_GROUP_
+  SIG_VALTYPE_
+  SIGTYPE_VALTYPE_
+  BO_TX_BU_
+  BA_DEF_REL_
+  BA_REL_
+  BA_DEF_DEF_REL_
+  BU_SG_REL_
+  BU_EV_REL_
+  BU_BO_REL_
+  SG_MUL_VAL_
+
+BS_ :
+
+BU_ : BME HOST
+
+BO_ 529 BME_Actual_1: 8 BME
+  SG_ Dyno_Speed : 0|32@1+ (1,0) [-10000|10000] "rpm" Vector__XXX
+  SG_ Throttle_Set : 32|32@1+ (1,0) [0|100] "%" Vector__XXX
+
+BO_ 530 BME_Actual_2: 6 BME
+  SG_ Dyno_Torque : 0|32@1+ (1,0) [-10000|10000] "Nm" Vector__XXX
+  SG_ Lifesignal : 32|16@1+ (1,0) [0|10000] "" Vector__XXX
+
+BO_ 512 BME_Control: 5 BME
+  SG_ Control_Mode_State : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ Dyno_OnOff_State : 24|8@1+ (1,0) [0|255] "-" Vector__XXX
+  SG_ System_Error : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ System_State : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ Torque_Mode_State : 32|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 256 HOST_Control: 7 HOST
+  SG_ Control_Mode_Command : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ Dyno_On_Off : 16|8@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ Ignition_Key : 40|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ Remote_Command : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ Remote_Takeover : 32|8@1+ (1,0) [0|255] "" Vector__XXX
+  SG_ Reset_Key : 24|8@1+ (1,0) [0|0] "" Vector__XXX
+  SG_ Starter : 41|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ Torque_Mode_Command : 48|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 272 HOST_Demand_1: 8 HOST
+  SG_ Speed_Demand : 0|32@1+ (1,0) [-10000|10000] "rpm" Vector__XXX
+  SG_ Torque_Demand : 32|32@1+ (1,0) [-10000|10000] "Nm" Vector__XXX
+
+BO_ 273 HOST_Demand_2: 6 HOST
+  SG_ Alpha_demand : 0|32@1+ (1,0) [0|100] "%" Vector__XXX
+  SG_ LifesignalFeedback : 32|16@1+ (1,0) [0|10000] "-" Vector__XXX
+
+CM_ BO_ 529 "BME->HOST";
+CM_ BO_ 530 "BME->HOST";
+CM_ BO_ 512 "BME->HOST";
+CM_ BO_ 256 "HOST->BME";
+CM_ BO_ 272 "HOST->BME";
+CM_ BO_ 273 "HOST->BME";
+CM_ SG_ 256 Reset_Key "needs pulse 0->1; then back to 0";
+CM_ SG_ 256 Control_Mode_Command "0 = speed control (dyno follows Speed_Demand), 1 = torque control (dyno applies Torque_Demand)";
+CM_ SG_ 256 Ignition_Key "Engine ignition (engine-sim extension, not part of AVL EMCON)";
+CM_ SG_ 256 Starter "Starter motor, active while 1 (engine-sim extension, not part of AVL EMCON)";
+CM_ SG_ 273 LifesignalFeedback "Echo of BME Lifesignal. BME sets System_Error = Trouble and leaves remote control if not updated for 100 ms (5 cycles)";
+CM_ SG_ 530 Lifesignal "Incremented by the BME every cycle, wraps around";
+CM_ SG_ 530 Dyno_Torque "Positive = braking (absorbed) torque";
+BA_DEF_ "DBName" STRING;
+BA_DEF_ "BusType" STRING;
+BA_DEF_ BO_ "VFrameFormat" ENUM "StandardCAN","ExtendedCAN","reserved","J1939PG","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","reserved","StandardCAN_FD","ExtendedCAN_FD";
+BA_DEF_ BO_ "GenMsgSendType" ENUM "Cyclic","Event","CyclicIfActive","SpontanWithDelay","CyclicAndSpontan","CyclicAndSpontanWithDelay";
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 0;
+BA_DEF_ BO_ "GenMsgDelayTime" INT 0 0;
+BA_DEF_ SG_ "GenSigStartValue" FLOAT 0 0;
+BA_DEF_ "Baudrate" INT 0 1000000;
+BA_DEF_DEF_ "DBName" "Cluster";
+BA_DEF_DEF_ "BusType" "CAN";
+BA_DEF_DEF_ "VFrameFormat" "StandardCAN";
+BA_DEF_DEF_ "GenMsgSendType" "Cyclic";
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_DEF_DEF_ "GenMsgDelayTime" 0;
+BA_DEF_DEF_ "GenSigStartValue" 0;
+BA_DEF_DEF_ "Baudrate" 500000;
+BA_ "Baudrate" 500000;
+BA_ "VFrameFormat" BO_ 529 0;
+BA_ "GenMsgSendType" BO_ 529 0;
+BA_ "GenMsgCycleTime" BO_ 529 20;
+BA_ "VFrameFormat" BO_ 530 0;
+BA_ "GenMsgSendType" BO_ 530 0;
+BA_ "GenMsgCycleTime" BO_ 530 20;
+BA_ "VFrameFormat" BO_ 512 0;
+BA_ "GenMsgSendType" BO_ 512 0;
+BA_ "GenMsgCycleTime" BO_ 512 100;
+BA_ "VFrameFormat" BO_ 256 0;
+BA_ "GenMsgSendType" BO_ 256 0;
+BA_ "GenMsgCycleTime" BO_ 256 100;
+BA_ "VFrameFormat" BO_ 272 0;
+BA_ "GenMsgSendType" BO_ 272 0;
+BA_ "GenMsgCycleTime" BO_ 272 20;
+BA_ "VFrameFormat" BO_ 273 0;
+BA_ "GenMsgSendType" BO_ 273 0;
+BA_ "GenMsgCycleTime" BO_ 273 20;
+VAL_ 512 Torque_Mode_State 1 "Td_Mode Shaft Torque Controler" 0 "Te_Mode Normal Torque Controler" ;
+VAL_ 512 Dyno_OnOff_State 2 "Transition" 1 "DynoON" 0 "DynoOFF" ;
+VAL_ 512 System_Error 1 "NoTrouble" 0 "Trouble" ;
+VAL_ 512 Control_Mode_State 1 "Torque" 0 "Speed" ;
+VAL_ 512 System_State 2 "Remote" 1 "Manual" 0 "notManual" ;
+VAL_ 256 Torque_Mode_Command 1 "Td_Mode Shaft Torque Controler" 0 "Te_Mode Normal Torque Controler" ;
+VAL_ 256 Remote_Takeover 1 "Remote" 0 "Manual" ;
+VAL_ 256 Reset_Key 1 "pushed" 0 "released" ;
+VAL_ 256 Dyno_On_Off 1 "Dyno_ON" 0 "Dyno_OFF" ;
+VAL_ 256 Control_Mode_Command 1 "Torque" 0 "Speed" ;
+VAL_ 256 Remote_Command 1 "Remote" 0 "Manual" ;
+VAL_ 256 Ignition_Key 1 "On" 0 "Off" ;
+VAL_ 256 Starter 1 "Cranking" 0 "Off" ;
+SIG_VALTYPE_ 529 Dyno_Speed : 1;
+SIG_VALTYPE_ 529 Throttle_Set : 1;
+SIG_VALTYPE_ 530 Dyno_Torque : 1;
+SIG_VALTYPE_ 272 Speed_Demand : 1;
+SIG_VALTYPE_ 272 Torque_Demand : 1;
+SIG_VALTYPE_ 273 Alpha_demand : 1;

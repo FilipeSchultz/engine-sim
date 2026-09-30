@@ -22,10 +22,13 @@
 #include "info_cluster.h"
 #include "application_settings.h"
 #include "transmission.h"
+#include "can_interface.h"
+#include "avl_emcon.h"
 
 #include "delta.h"
 #include "dtv.h"
 
+#include <random>
 #include <vector>
 
 class EngineSimApplication {
@@ -94,6 +97,44 @@ class EngineSimApplication {
         void renderScene();
 
         void refreshUserInterface();
+
+        void openCan();
+        void updateCanReceive(double dt);
+        void updateCanTransmit();
+        void setCanRemote(bool remote);
+        bool isCanRemote() const { return m_canRemote; }
+
+    protected:
+        CanInterface m_can;
+
+        // Latest commands received from the HOST (AVL EMCON)
+        avl_emcon::HostControl m_hostControl;
+        avl_emcon::HostDemand1 m_hostDemand1;
+        avl_emcon::HostDemand2 m_hostDemand2;
+
+        // HOST has control of throttle, ignition, starter and dyno
+        bool m_canRemote = false;
+
+        // Lifesignal timeout (0 = check disabled) and fault latched until Reset_Key
+        int m_canLifesignalTimeoutMs = 0;
+        double m_canLifesignalAge = 0.0;
+        uint16_t m_canLastLifesignalFeedback = 0;
+        bool m_canError = false;
+        bool m_canPrevResetKey = false;
+
+        // Dyno demand ramps (0 = no ramp): the dyno moves towards Speed_Demand /
+        // Torque_Demand at a limited rate, starting from the current operating point
+        double m_canSpeedRampRate = 0.0;    // [rad/s per s]
+        double m_canTorqueRampRate = 0.0;   // [N m per s]
+        double m_canRampedDynoSpeed = 0.0;
+        double m_canRampedDynoTorque = 0.0;
+
+        // Load cell model for the reported Dyno_Torque: gaussian noise followed by
+        // a first-order filter
+        double m_canTorqueNoise_Nm = 0.0;
+        double m_canTorqueFilterTau = 0.0;  // [s]
+        double m_canMeasuredTorque_Nm = 0.0;
+        std::mt19937 m_canRng;
 
     protected:
         double m_speedSetting = 1.0;

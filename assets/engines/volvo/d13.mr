@@ -1,0 +1,442 @@
+import "engine_sim.mr"
+
+// Volvo D13 - 6 cilindros em linha, diesel, 12,8 L
+//
+// Dados reais usados:
+//   diametro 131 mm, curso 158 mm, 12.777 cc
+//   taxa de compressao ~17.5:1
+//   4 valvulas por cilindro, comando unico no cabecote
+//   ordem de ignicao 1-5-3-6-2-4
+//   marcha lenta ~600 rpm, rotacao maxima ~2100 rpm
+//
+// Aproximacoes (limitacoes do engine-sim):
+//   - O simulador so modela combustao por centelha (frente de chama).
+//     A injecao diesel e aproximada por uma "centelha" perto do PMS
+//     queimando um combustivel com as propriedades do diesel.
+//   - Nao existe turbo no simulador, entao o motor e aspirado.
+//     O torque fica bem abaixo dos ~2.600 Nm do D13 original.
+
+units units()
+constants constants()
+impulse_response_library ir_lib()
+
+label cycle(2 * 360 * units.deg)
+
+private node wires {
+    output wire1: ignition_wire();
+    output wire2: ignition_wire();
+    output wire3: ignition_wire();
+    output wire4: ignition_wire();
+    output wire5: ignition_wire();
+    output wire6: ignition_wire();
+}
+
+public node d13_ignition {
+    input wires;
+    input timing_curve;
+    input rev_limit: 2200 * units.rpm;
+    alias output __out:
+        ignition_module(
+            timing_curve: timing_curve,
+            rev_limit: rev_limit,
+            limiter_duration: 0.1
+        )
+            .connect_wire(wires.wire1, (0.0 / 6.0) * cycle)
+            .connect_wire(wires.wire5, (1.0 / 6.0) * cycle)
+            .connect_wire(wires.wire3, (2.0 / 6.0) * cycle)
+            .connect_wire(wires.wire6, (3.0 / 6.0) * cycle)
+            .connect_wire(wires.wire2, (4.0 / 6.0) * cycle)
+            .connect_wire(wires.wire4, (5.0 / 6.0) * cycle);
+}
+
+public node d13_camshaft_builder {
+    input intake_lobe_profile;
+    input exhaust_lobe_profile;
+    input intake_lobe_center: 110 * units.deg;
+    input exhaust_lobe_center: 112 * units.deg;
+    input advance: 0.0 * units.deg;
+    input base_radius: 25 * units.mm;
+
+    output intake_cam: _intake_cam;
+    output exhaust_cam: _exhaust_cam;
+
+    camshaft_parameters params(
+        advance: advance,
+        base_radius: base_radius
+    )
+
+    camshaft _intake_cam(params, lobe_profile: intake_lobe_profile)
+    camshaft _exhaust_cam(params, lobe_profile: exhaust_lobe_profile)
+
+    label rot(2 * (360 / 6.0) * units.deg)
+    label rot360(360 * units.deg)
+
+    // 1 5 3 6 2 4
+    _exhaust_cam
+        .add_lobe((rot360 - exhaust_lobe_center) + 0 * rot)
+        .add_lobe((rot360 - exhaust_lobe_center) + 4 * rot)
+        .add_lobe((rot360 - exhaust_lobe_center) + 2 * rot)
+        .add_lobe((rot360 - exhaust_lobe_center) + 5 * rot)
+        .add_lobe((rot360 - exhaust_lobe_center) + 1 * rot)
+        .add_lobe((rot360 - exhaust_lobe_center) + 3 * rot)
+
+    _intake_cam
+        .add_lobe(rot360 + intake_lobe_center + 0 * rot)
+        .add_lobe(rot360 + intake_lobe_center + 4 * rot)
+        .add_lobe(rot360 + intake_lobe_center + 2 * rot)
+        .add_lobe(rot360 + intake_lobe_center + 5 * rot)
+        .add_lobe(rot360 + intake_lobe_center + 1 * rot)
+        .add_lobe(rot360 + intake_lobe_center + 3 * rot)
+}
+
+private node d13_head {
+    input intake_camshaft;
+    input exhaust_camshaft;
+    input chamber_volume: 129 * units.cc;
+    input intake_runner_volume: 400 * units.cc;
+    input intake_runner_cross_section_area: 2.2 * units.inch * 2.2 * units.inch;
+    input exhaust_runner_volume: 250 * units.cc;
+    input exhaust_runner_cross_section_area: 1.8 * units.inch * 1.8 * units.inch;
+
+    input flow_attenuation: 1.0;
+    input lift_scale: 1.0;
+    input flip_display: false;
+    alias output __out: head;
+
+    // Fluxo por cilindro (CFM @ 28" H2O), 2 valvulas de admissao
+    function intake_flow(50 * units.thou)
+    intake_flow
+        .add_flow_sample(0 * lift_scale, 0 * flow_attenuation)
+        .add_flow_sample(50 * lift_scale, 60 * flow_attenuation)
+        .add_flow_sample(100 * lift_scale, 115 * flow_attenuation)
+        .add_flow_sample(150 * lift_scale, 170 * flow_attenuation)
+        .add_flow_sample(200 * lift_scale, 220 * flow_attenuation)
+        .add_flow_sample(250 * lift_scale, 260 * flow_attenuation)
+        .add_flow_sample(300 * lift_scale, 290 * flow_attenuation)
+        .add_flow_sample(350 * lift_scale, 310 * flow_attenuation)
+        .add_flow_sample(400 * lift_scale, 325 * flow_attenuation)
+        .add_flow_sample(450 * lift_scale, 335 * flow_attenuation)
+        .add_flow_sample(500 * lift_scale, 340 * flow_attenuation)
+        .add_flow_sample(550 * lift_scale, 342 * flow_attenuation)
+
+    function exhaust_flow(50 * units.thou)
+    exhaust_flow
+        .add_flow_sample(0 * lift_scale, 0 * flow_attenuation)
+        .add_flow_sample(50 * lift_scale, 45 * flow_attenuation)
+        .add_flow_sample(100 * lift_scale, 88 * flow_attenuation)
+        .add_flow_sample(150 * lift_scale, 130 * flow_attenuation)
+        .add_flow_sample(200 * lift_scale, 168 * flow_attenuation)
+        .add_flow_sample(250 * lift_scale, 200 * flow_attenuation)
+        .add_flow_sample(300 * lift_scale, 222 * flow_attenuation)
+        .add_flow_sample(350 * lift_scale, 238 * flow_attenuation)
+        .add_flow_sample(400 * lift_scale, 250 * flow_attenuation)
+        .add_flow_sample(450 * lift_scale, 256 * flow_attenuation)
+        .add_flow_sample(500 * lift_scale, 260 * flow_attenuation)
+        .add_flow_sample(550 * lift_scale, 262 * flow_attenuation)
+
+    generic_cylinder_head head(
+        chamber_volume: chamber_volume,
+        intake_runner_volume: intake_runner_volume,
+        intake_runner_cross_section_area: intake_runner_cross_section_area,
+        exhaust_runner_volume: exhaust_runner_volume,
+        exhaust_runner_cross_section_area: exhaust_runner_cross_section_area,
+
+        intake_port_flow: intake_flow,
+        exhaust_port_flow: exhaust_flow,
+        valvetrain: standard_valvetrain(
+            intake_camshaft: intake_camshaft,
+            exhaust_camshaft: exhaust_camshaft
+        ),
+        flip_display: flip_display
+    )
+}
+
+public node volvo_d13 {
+    alias output __out: engine;
+
+    wires wires()
+
+    engine engine(
+        name: "Volvo D13 [I6 Diesel]",
+        starter_torque: 1000 * units.lb_ft,
+        starter_speed: 180 * units.rpm,
+        redline: 2100 * units.rpm,
+        dyno_min_speed: 500 * units.rpm,
+        dyno_max_speed: 2200 * units.rpm,
+        dyno_hold_step: 50 * units.rpm,
+        fuel: fuel(
+            name: "Diesel",
+            molecular_mass: 170 * units.g,
+            energy_density: 43.0 * units.kJ / units.g,
+            density: 0.832 * units.kg / units.L,
+            molecular_afr: 17.75,
+            max_burning_efficiency: 1.0,
+            burning_efficiency_randomness: 0.1,
+            max_turbulence_effect: 10.0,
+            max_dilution_effect: 5.0
+        ),
+        throttle_gamma: 2.5,
+        hf_gain: 0.01,
+        noise: 0.6,
+        jitter: 0.3,
+        simulation_frequency: 8000
+    )
+
+    label bore(131 * units.mm)
+    label stroke(158 * units.mm)
+    label rod_length(255 * units.mm)
+    label rod_mass(4500 * units.g)
+    label compression_height(80 * units.mm)
+    label crank_mass(120 * units.kg)
+    label flywheel_mass(90 * units.kg)
+    label flywheel_radius(250 * units.mm)
+
+    label crank_moment(
+        disk_moment_of_inertia(mass: crank_mass, radius: stroke / 2)
+    )
+    label flywheel_moment(
+        disk_moment_of_inertia(mass: flywheel_mass, radius: flywheel_radius)
+    )
+    label other_moment( // Comando, engrenagens, polias, etc. [estimado]
+        disk_moment_of_inertia(mass: 30 * units.kg, radius: 10 * units.cm)
+    )
+
+    crankshaft c0(
+        throw: stroke / 2,
+        flywheel_mass: flywheel_mass,
+        mass: crank_mass,
+        friction_torque: 100.0 * units.lb_ft,
+        moment_of_inertia:
+            crank_moment + flywheel_moment + other_moment,
+        position_x: 0.0,
+        position_y: 0.0,
+        tdc: constants.pi / 2
+    )
+
+    // 1 5 3 6 2 4
+    rod_journal rj0(angle: 0 * units.deg)
+    rod_journal rj1(angle: 480 * units.deg)
+    rod_journal rj2(angle: 240 * units.deg)
+    rod_journal rj3(angle: 600 * units.deg)
+    rod_journal rj4(angle: 120 * units.deg)
+    rod_journal rj5(angle: 360 * units.deg)
+
+    c0
+        .add_rod_journal(rj0)
+        .add_rod_journal(rj1)
+        .add_rod_journal(rj2)
+        .add_rod_journal(rj3)
+        .add_rod_journal(rj4)
+        .add_rod_journal(rj5)
+
+    piston_parameters piston_params(
+        mass: 4500 * units.g,
+        blowby: 0,
+        compression_height: compression_height,
+        wrist_pin_position: 0 * units.mm,
+        displacement: 0.0
+    )
+
+    connecting_rod_parameters cr_params(
+        mass: rod_mass,
+        moment_of_inertia: rod_moment_of_inertia(
+            mass: rod_mass,
+            length: rod_length
+        ),
+        center_of_mass: 0.0,
+        length: rod_length
+    )
+
+    cylinder_bank_parameters bank_params(
+        bore: bore,
+        deck_height: stroke / 2 + rod_length + compression_height
+    )
+
+    intake intake(
+        plenum_volume: 6.0 * units.L,
+        plenum_cross_section_area: 60.0 * units.cm2,
+        intake_flow_rate: k_carb(1500.0),
+        runner_flow_rate: k_carb(400.0),
+        runner_length: 12.0 * units.inch,
+        molecular_afr: 17.75,
+        idle_flow_rate: k_carb(0.0),
+        idle_throttle_plate_position: 0.996,
+        velocity_decay: 0.5
+    )
+
+    exhaust_system_parameters es_params(
+        outlet_flow_rate: k_carb(2500.0),
+        primary_tube_length: 20.0 * units.inch,
+        primary_flow_rate: k_carb(600.0),
+        velocity_decay: 1.0
+    )
+
+    // Coletor dividido em dois (cilindros 1-3 e 4-6), como no D13
+    exhaust_system exhaust0(
+        es_params,
+        length: 200.0 * units.inch,
+        audio_volume: 0.5,
+        impulse_response: ir_lib.mild_exhaust_0_reverb)
+    exhaust_system exhaust1(
+        es_params,
+        length: 200.0 * units.inch,
+        audio_volume: 0.5,
+        impulse_response: ir_lib.mild_exhaust_0_reverb)
+
+    label spacing(1.0 * units.inch)
+
+    cylinder_bank b0(bank_params, angle: 0)
+    b0
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.1)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj0,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire1,
+            primary_length: spacing * 3,
+            sound_attenuation: 0.9
+        )
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.05)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj1,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire2,
+            primary_length: spacing * 2,
+            sound_attenuation: 0.95
+        )
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.1)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj2,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire3,
+            primary_length: spacing * 1,
+            sound_attenuation: 0.9
+        )
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.05)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj3,
+            intake: intake,
+            exhaust_system: exhaust1,
+            ignition_wire: wires.wire4,
+            primary_length: spacing * 1,
+            sound_attenuation: 0.97
+        )
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.1)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj4,
+            intake: intake,
+            exhaust_system: exhaust1,
+            ignition_wire: wires.wire5,
+            primary_length: spacing * 2,
+            sound_attenuation: 0.98
+        )
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.05)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj5,
+            intake: intake,
+            exhaust_system: exhaust1,
+            ignition_wire: wires.wire6,
+            primary_length: spacing * 3,
+            sound_attenuation: 0.93
+        )
+
+    engine
+        .add_cylinder_bank(b0)
+
+    engine.add_crankshaft(c0)
+
+    // Comando de diesel: pouca sobreposicao, levante alto
+    harmonic_cam_lobe intake_lobe(
+        duration_at_50_thou: 210 * units.deg,
+        gamma: 1.0,
+        lift: 13.0 * units.mm,
+        steps: 100
+    )
+
+    harmonic_cam_lobe exhaust_lobe(
+        duration_at_50_thou: 220 * units.deg,
+        gamma: 1.0,
+        lift: 13.0 * units.mm,
+        steps: 100
+    )
+
+    d13_camshaft_builder camshaft(
+        intake_lobe_profile: intake_lobe,
+        exhaust_lobe_profile: exhaust_lobe,
+        intake_lobe_center: 110 * units.deg,
+        exhaust_lobe_center: 112 * units.deg,
+        base_radius: 25 * units.mm
+    )
+
+    b0.set_cylinder_head(
+        d13_head(
+            intake_camshaft: camshaft.intake_cam,
+            exhaust_camshaft: camshaft.exhaust_cam
+        )
+    )
+
+    // "Ponto de injecao": avanco em graus antes do PMS
+    function timing_curve(500 * units.rpm)
+    timing_curve
+        .add_sample(0 * units.rpm, 15 * units.deg)
+        .add_sample(500 * units.rpm, 15 * units.deg)
+        .add_sample(1000 * units.rpm, 18 * units.deg)
+        .add_sample(1500 * units.rpm, 22 * units.deg)
+        .add_sample(2000 * units.rpm, 25 * units.deg)
+        .add_sample(2500 * units.rpm, 25 * units.deg)
+
+    engine.add_ignition_module(
+        d13_ignition(
+            wires: wires,
+            timing_curve: timing_curve,
+            rev_limit: 2200 * units.rpm
+        )
+    )
+}
+
+// Cavalo mecanico Volvo FH com semirreboque (~40 t)
+private node volvo_fh_vehicle {
+    alias output __out:
+        vehicle(
+            mass: 40000 * units.kg,
+            drag_coefficient: 0.6,
+            cross_sectional_area: (2.5 * units.m) * (4.0 * units.m),
+            diff_ratio: 3.09,
+            tire_radius: 0.53 * units.m,
+            rolling_resistance: 2400 * units.N
+        );
+}
+
+// I-Shift de 12 marchas
+private node volvo_ishift {
+    alias output __out:
+        transmission(
+            max_clutch_torque: 2500 * units.lb_ft
+        )
+        .add_gear(14.94)
+        .add_gear(11.73)
+        .add_gear(9.04)
+        .add_gear(7.09)
+        .add_gear(5.54)
+        .add_gear(4.35)
+        .add_gear(3.44)
+        .add_gear(2.70)
+        .add_gear(2.08)
+        .add_gear(1.63)
+        .add_gear(1.27)
+        .add_gear(1.00);
+}
+
+public node main {
+    set_engine(volvo_d13())
+    set_vehicle(volvo_fh_vehicle())
+    set_transmission(volvo_ishift())
+}

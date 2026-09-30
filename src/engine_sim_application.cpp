@@ -13,12 +13,15 @@
 #include "../include/exhaust_system.h"
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
+#include "../include/avl_emcon.h"
 
 #include "../scripting/include/compiler.h"
 
 #include <chrono>
 #include <stdlib.h>
 #include <sstream>
+#include <fstream>
+#include <windows.h>
 
 #if ATG_ENGINE_SIM_DISCORD_ENABLED
 #include "../discord/Discord.h"
@@ -180,6 +183,8 @@ void EngineSimApplication::initialize() {
     m_audioSource->SetMode((m_simulator->getEngine() != nullptr)
         ? ysAudioSource::Mode::Loop
         : ysAudioSource::Mode::Stop);
+
+    openCan();
     m_audioSource->SetPan(0.0f);
     m_audioSource->SetVolume(1.0f);
 
@@ -203,7 +208,10 @@ void EngineSimApplication::process(float frame_dt) {
     frame_dt = static_cast<float>(clamp(frame_dt, 1 / 200.0f, 1 / 30.0f));
 
     double speed = 1.0 / 1.0;
-    if (m_engine.IsKeyDown(ysKey::Code::N1)) {
+    if (m_canRemote) {
+        // Keep real time while a CAN HOST is in control
+    }
+    else if (m_engine.IsKeyDown(ysKey::Code::N1)) {
         speed = 1 / 10.0;
     }
     else if (m_engine.IsKeyDown(ysKey::Code::N2)) {
@@ -383,6 +391,7 @@ void EngineSimApplication::run() {
 
         updateScreenSizeStability();
 
+        updateCanReceive(m_engine.GetFrameLength());
         processEngineInput();
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Insert) &&
@@ -403,6 +412,8 @@ void EngineSimApplication::run() {
             process(m_engine.GetFrameLength());
         }
 
+        updateCanTransmit();
+
         m_uiManager.update(m_engine.GetFrameLength());
 
         renderScene();
@@ -422,6 +433,8 @@ void EngineSimApplication::run() {
 }
 
 void EngineSimApplication::destroy() {
+    m_can.close();
+
     m_shaderSet.Destroy();
 
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
@@ -639,6 +652,23 @@ void EngineSimApplication::loadScript() {
     }
 
     compiler.destroy();
+
+    if (engine == nullptr) {
+        // Show the script errors instead of crashing on a null engine
+        std::ifstream errorLog("error_log.log");
+        std::stringstream errors;
+        errors << errorLog.rdbuf();
+        const std::string message =
+            "Failed to load ../assets/main.mr\n\n" + errors.str();
+        MessageBoxA(nullptr, message.c_str(), "Engine Sim - script error", MB_OK | MB_ICONERROR);
+
+        if (vehicle != nullptr) delete vehicle;
+        if (transmission != nullptr) delete transmission;
+
+        // Keep the currently loaded engine when reloading; nothing to fall back to on startup
+        if (m_iceEngine == nullptr) ExitProcess(1);
+        return;
+    }
 #endif /* ATG_ENGINE_SIM_PIRANHA_ENABLED */
 
     if (vehicle == nullptr) {
@@ -665,6 +695,191 @@ void EngineSimApplication::loadScript() {
 
     loadEngine(engine, vehicle, transmission);
     refreshUserInterface();
+}
+
+namespace {
+    int getEnvironmentInt(const char *name, int defaultValue) {
+        char value[32];
+        const DWORD length = GetEnvironmentVariableA(name, value, sizeof(value));
+        if (length == 0 || length >= sizeof(value)) return defaultValue;
+
+        return std::atoi(value);
+    }
+
+    double getEnvironmentDouble(const char *name, double defaultValue) {
+        char value[32];
+        const DWORD length = GetEnvironmentVariableA(name, value, sizeof(value));
+        if (length == 0 || length >= sizeof(value)) return defaultValue;
+
+        return std::atof(value);
+    }
+
+    double rampTowards(double current, double target, double maxStep) {
+        if (maxStep <= 0) return target;
+        else if (target > current) return std::fmin(current + maxStep, target);
+        else return std::fmax(current - maxStep, target);
+    }
+}
+
+void EngineSimApplication::openCan() {
+#ifdef ATG_ENGINE_SIM_CAN_ENABLED
+    const int channel = getEnvironmentInt("ENGINE_SIM_CAN_CHANNEL", 0);
+    const int bitrate = getEnvironmentInt("ENGINE_SIM_CAN_BITRATE", 500000);
+
+    // Disabled by default to ease testing; the DBC specifies 100 ms
+    m_canLifesignalTimeoutMs = getEnvironmentInt("ENGINE_SIM_CAN_LIFESIGNAL_TIMEOUT_MS", 0);
+
+    // Dyno behaviour under CAN control (0 disables the ramp / noise / filter)
+    m_canSpeedRampRate = units::rpm(getEnvironmentDouble("ENGINE_SIM_DYNO_SPEED_RAMP_RPM_S", 1000.0));
+    m_canTorqueRampRate = units::torque(getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_RAMP_NM_S", 2000.0), units::Nm);
+    m_canTorqueNoise_Nm = getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_NOISE_NM", 1.0);
+    m_canTorqueFilterTau = getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_FILTER_MS", 50.0) / 1000.0;
+    m_canRng.seed(std::random_device()());
+
+    if (!m_can.open(channel, bitrate)) {
+        m_infoCluster->setLogMessage("CAN: " + m_can.getLastError());
+        return;
+    }
+
+    m_can.setCyclic(
+        avl_emcon::encodeBmeControl(avl_emcon::BmeControl()),
+        avl_emcon::BmeControlPeriodMs);
+    m_can.setCyclic(
+        avl_emcon::encodeBmeActual1(0.0f, 0.0f),
+        avl_emcon::BmeActualPeriodMs);
+    m_can.setCyclic(
+        avl_emcon::encodeBmeActual2(0.0f),
+        avl_emcon::BmeActualPeriodMs,
+        avl_emcon::makeLifesignalWriter());
+
+    m_infoCluster->setLogMessage(
+        "CAN: AVL EMCON on channel " + std::to_string(channel)
+        + " @ " + std::to_string(bitrate / 1000) + " kbit/s");
+#endif /* ATG_ENGINE_SIM_CAN_ENABLED */
+}
+
+void EngineSimApplication::updateCanReceive(double dt) {
+    if (!m_can.isOpen() || m_iceEngine == nullptr) return;
+
+    CanInterface::Frame frame;
+    while (m_can.read(&frame)) {
+        if (frame.extended) continue;
+
+        switch (frame.id) {
+        case avl_emcon::HostControlId:
+            avl_emcon::decodeHostControl(frame, &m_hostControl);
+            break;
+        case avl_emcon::HostDemand1Id:
+            avl_emcon::decodeHostDemand1(frame, &m_hostDemand1);
+            break;
+        case avl_emcon::HostDemand2Id:
+            avl_emcon::decodeHostDemand2(frame, &m_hostDemand2);
+            break;
+        default:
+            break;
+        }
+    }
+
+    // Reset_Key: rising edge clears a latched fault
+    if (m_hostControl.resetKey && !m_canPrevResetKey && m_canError) {
+        m_canError = false;
+        m_canLifesignalAge = 0.0;
+        m_infoCluster->setLogMessage("CAN: ERROR RESET");
+    }
+    m_canPrevResetKey = m_hostControl.resetKey;
+
+    // Lifesignal: the HOST must keep changing LifesignalFeedback while in remote
+    if (m_hostDemand2.lifesignalFeedback != m_canLastLifesignalFeedback) {
+        m_canLastLifesignalFeedback = m_hostDemand2.lifesignalFeedback;
+        m_canLifesignalAge = 0.0;
+    }
+    else {
+        m_canLifesignalAge += dt;
+    }
+
+    if (m_canRemote
+        && m_canLifesignalTimeoutMs > 0
+        && m_canLifesignalAge * 1000.0 > m_canLifesignalTimeoutMs)
+    {
+        m_canError = true;
+        m_infoCluster->setLogMessage("CAN: LIFESIGNAL TIMEOUT - BACK TO MANUAL");
+    }
+
+    setCanRemote(m_hostControl.remoteCommand && !m_canError);
+}
+
+void EngineSimApplication::setCanRemote(bool remote) {
+    if (remote == m_canRemote) return;
+    m_canRemote = remote;
+
+    if (remote) {
+        m_infoCluster->setLogMessage("CAN: REMOTE CONTROL");
+        return;
+    }
+
+    // Leaving remote: bring the engine and dyno to a safe state before the
+    // keyboard takes over
+    m_targetSpeedSetting = 0.0;
+    m_simulator->m_starterMotor.m_enabled = false;
+    m_simulator->m_dyno.m_enabled = false;
+    m_simulator->m_dyno.m_hold = false;
+    m_simulator->m_dyno.m_torqueMode = false;
+    m_dynoSpeed = 0.0;
+
+    if (!m_canError) {
+        m_infoCluster->setLogMessage("CAN: MANUAL CONTROL");
+    }
+}
+
+void EngineSimApplication::updateCanTransmit() {
+    if (!m_can.isOpen() || m_iceEngine == nullptr) return;
+
+    const bool dynoEnabled = m_simulator->m_dyno.m_enabled;
+
+    avl_emcon::BmeControl control;
+    control.systemState = m_canRemote
+        ? avl_emcon::SystemState::Remote
+        : avl_emcon::SystemState::Manual;
+    control.controlMode = m_simulator->m_dyno.m_torqueMode
+        ? avl_emcon::ControlMode::Torque
+        : avl_emcon::ControlMode::Speed;
+    control.systemError = m_canError
+        ? avl_emcon::SystemError::Trouble
+        : avl_emcon::SystemError::NoTrouble;
+    control.dynoOnOffState = dynoEnabled
+        ? avl_emcon::DynoOnOffState::On
+        : avl_emcon::DynoOnOffState::Off;
+    control.torqueMode = m_hostControl.torqueMode;
+
+    // The dyno is coupled to the crankshaft, so its speed is the engine speed.
+    // Its torque is the braking torque it applies (only meaningful when enabled).
+    const float dynoSpeed_rpm = static_cast<float>(std::abs(m_iceEngine->getRpm()));
+    const float throttleSet_percent = static_cast<float>(m_speedSetting * 100.0);
+    const double trueTorque_Nm = dynoEnabled
+        ? units::convert(m_simulator->getFilteredDynoTorque(), units::Nm)
+        : 0.0;
+
+    // Load cell: gaussian noise (present even with the dyno off, like a real
+    // sensor) followed by a first-order low-pass filter
+    double rawTorque_Nm = trueTorque_Nm;
+    if (m_canTorqueNoise_Nm > 0) {
+        std::normal_distribution<double> noise(0.0, m_canTorqueNoise_Nm);
+        rawTorque_Nm += noise(m_canRng);
+    }
+
+    const double dt = m_engine.GetFrameLength();
+    const double alpha = (m_canTorqueFilterTau > 0)
+        ? dt / (dt + m_canTorqueFilterTau)
+        : 1.0;
+    m_canMeasuredTorque_Nm += alpha * (rawTorque_Nm - m_canMeasuredTorque_Nm);
+
+    m_can.setCyclic(avl_emcon::encodeBmeControl(control), avl_emcon::BmeControlPeriodMs);
+    m_can.setCyclic(
+        avl_emcon::encodeBmeActual1(dynoSpeed_rpm, throttleSet_percent),
+        avl_emcon::BmeActualPeriodMs);
+    m_can.setCyclic(
+        avl_emcon::encodeBmeActual2(static_cast<float>(m_canMeasuredTorque_Nm)),
+        avl_emcon::BmeActualPeriodMs);
 }
 
 void EngineSimApplication::processEngineInput() {
@@ -791,7 +1006,10 @@ void EngineSimApplication::processEngineInput() {
         m_targetSpeedSetting = clamp(m_targetSpeedSetting + mouseWheelDelta * 0.0001);
     }
 
-    if (prevTargetThrottle != m_targetSpeedSetting) {
+    if (m_canRemote) {
+        m_targetSpeedSetting = clamp(m_hostDemand2.alphaDemand_percent / 100.0);
+    }
+    else if (prevTargetThrottle != m_targetSpeedSetting) {
         m_infoCluster->setLogMessage("Speed control set to " + std::to_string(m_targetSpeedSetting));
     }
 
@@ -814,7 +1032,7 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage("[,] - Set render layer to " + std::to_string(getViewParameters().Layer0));
     }
 
-    if (m_engine.ProcessKeyDown(ysKey::Code::D)) {
+    if (m_engine.ProcessKeyDown(ysKey::Code::D) && !m_canRemote) {
         m_simulator->m_dyno.m_enabled = !m_simulator->m_dyno.m_enabled;
 
         const std::string msg = m_simulator->m_dyno.m_enabled
@@ -823,7 +1041,7 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_engine.ProcessKeyDown(ysKey::Code::H)) {
+    if (m_engine.ProcessKeyDown(ysKey::Code::H) && !m_canRemote) {
         m_simulator->m_dyno.m_hold = !m_simulator->m_dyno.m_hold;
 
         const std::string msg = m_simulator->m_dyno.m_hold
@@ -832,7 +1050,35 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_simulator->m_dyno.m_enabled) {
+    if (m_canRemote) {
+        // Control_Mode_Command: 0 = hold Speed_Demand, 1 = brake with Torque_Demand
+        const bool torqueMode = m_hostControl.controlMode == avl_emcon::ControlMode::Torque;
+
+        const bool speedControl = m_hostControl.dynoOn && !torqueMode;
+        const bool torqueControl = m_hostControl.dynoOn && torqueMode;
+
+        // Ramp the active demand; the inactive one tracks the current operating
+        // point so switching mode or enabling the dyno doesn't cause a step
+        m_canRampedDynoSpeed = speedControl
+            ? rampTowards(
+                m_canRampedDynoSpeed,
+                units::rpm(std::abs(m_hostDemand1.speedDemand_rpm)),
+                m_canSpeedRampRate * dt)
+            : m_iceEngine->getSpeed();
+        m_canRampedDynoTorque = torqueControl
+            ? rampTowards(
+                m_canRampedDynoTorque,
+                units::torque(m_hostDemand1.torqueDemand_Nm, units::Nm),
+                m_canTorqueRampRate * dt)
+            : std::fmax(m_simulator->getFilteredDynoTorque(), 0.0);
+
+        m_simulator->m_dyno.m_enabled = m_hostControl.dynoOn;
+        m_simulator->m_dyno.m_torqueMode = torqueMode;
+        m_simulator->m_dyno.m_hold = !torqueMode;
+        m_simulator->m_dyno.m_torqueSetpoint = m_canRampedDynoTorque;
+        m_dynoSpeed = m_canRampedDynoSpeed;
+    }
+    else if (m_simulator->m_dyno.m_enabled) {
         if (!m_simulator->m_dyno.m_hold) {
             if (m_simulator->getFilteredDynoTorque() > units::torque(1.0, units::ft_lb)) {
                 m_dynoSpeed += units::rpm(500) * dt;
@@ -853,11 +1099,20 @@ void EngineSimApplication::processEngineInput() {
         }
     }
 
-    m_dynoSpeed = clamp(m_dynoSpeed, m_iceEngine->getDynoMinSpeed(), m_iceEngine->getDynoMaxSpeed());
+    // Under CAN control the HOST owns the speed range; only reject absurd demands.
+    // The script limits (dyno_min_speed / dyno_max_speed) apply to the keyboard.
+    const double minDynoSpeed = m_canRemote ? 0.0 : m_iceEngine->getDynoMinSpeed();
+    const double maxDynoSpeed = m_canRemote
+        ? 1.2 * m_iceEngine->getRedline()
+        : m_iceEngine->getDynoMaxSpeed();
+    m_dynoSpeed = clamp(m_dynoSpeed, minDynoSpeed, maxDynoSpeed);
     m_simulator->m_dyno.m_rotationSpeed = m_dynoSpeed;
 
     const bool prevStarterEnabled = m_simulator->m_starterMotor.m_enabled;
-    if (m_engine.IsKeyDown(ysKey::Code::S)) {
+    if (m_canRemote) {
+        m_simulator->m_starterMotor.m_enabled = m_hostControl.starter;
+    }
+    else if (m_engine.IsKeyDown(ysKey::Code::S)) {
         m_simulator->m_starterMotor.m_enabled = true;
     }
     else {
@@ -871,11 +1126,18 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_engine.ProcessKeyDown(ysKey::Code::A)) {
-        m_simulator->getEngine()->getIgnitionModule()->m_enabled =
-            !m_simulator->getEngine()->getIgnitionModule()->m_enabled;
+    IgnitionModule *ignitionModule = m_simulator->getEngine()->getIgnitionModule();
+    const bool prevIgnitionEnabled = ignitionModule->m_enabled;
+    const bool ignitionKeyPressed = m_engine.ProcessKeyDown(ysKey::Code::A);
+    if (m_canRemote) {
+        ignitionModule->m_enabled = m_hostControl.ignitionKey;
+    }
+    else if (ignitionKeyPressed) {
+        ignitionModule->m_enabled = !ignitionModule->m_enabled;
+    }
 
-        const std::string msg = m_simulator->getEngine()->getIgnitionModule()->m_enabled
+    if (prevIgnitionEnabled != ignitionModule->m_enabled) {
+        const std::string msg = ignitionModule->m_enabled
             ? "IGNITION ENABLED"
             : "IGNITION DISABLED";
         m_infoCluster->setLogMessage(msg);
