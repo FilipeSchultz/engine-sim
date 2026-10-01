@@ -14,6 +14,7 @@
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
 #include "../include/avl_emcon.h"
+#include "../include/ecu/dcm_file.h"
 
 #include "../scripting/include/compiler.h"
 
@@ -184,6 +185,7 @@ void EngineSimApplication::initialize() {
         ? ysAudioSource::Mode::Loop
         : ysAudioSource::Mode::Stop);
 
+    initializeEcu();
     openCan();
     m_audioSource->SetPan(0.0f);
     m_audioSource->SetVolume(1.0f);
@@ -391,6 +393,7 @@ void EngineSimApplication::run() {
 
         updateScreenSizeStability();
 
+        updateEcu(m_engine.GetFrameLength());
         updateCanReceive(m_engine.GetFrameLength());
         processEngineInput();
 
@@ -434,6 +437,11 @@ void EngineSimApplication::run() {
 
 void EngineSimApplication::destroy() {
     m_can.close();
+
+    if (m_ecu.isLearning()) {
+        saveLearnedCalibration();
+    }
+    m_ecuLog.close();
 
     m_shaderSet.Destroy();
 
@@ -479,6 +487,9 @@ void EngineSimApplication::loadEngine(
     m_transmission = transmission;
 
     m_simulator = engine->createSimulator(vehicle, transmission);
+    if (m_simulator != nullptr) {
+        m_simulator->setEcu(&m_ecu);
+    }
 
     if (engine == nullptr || vehicle == nullptr || transmission == nullptr) {
         m_iceEngine = nullptr;
@@ -714,10 +725,142 @@ namespace {
         return std::atof(value);
     }
 
+    std::string getEnvironmentString(const char *name) {
+        char value[512];
+        const DWORD length = GetEnvironmentVariableA(name, value, sizeof(value));
+        if (length == 0 || length >= sizeof(value)) return "";
+
+        return std::string(value);
+    }
+
     double rampTowards(double current, double target, double maxStep) {
         if (maxStep <= 0) return target;
         else if (target > current) return std::fmin(current + maxStep, target);
         else return std::fmax(current - maxStep, target);
+    }
+}
+
+void EngineSimApplication::initializeEcu() {
+    m_calibrationPath = m_assetPath + "/calibration/calibration.dcm";
+
+    // First run: write the default (disabled) calibration so there is a file to edit
+    std::error_code ec;
+    if (!std::filesystem::exists(m_calibrationPath, ec)) {
+        std::filesystem::create_directories(std::filesystem::path(m_calibrationPath).parent_path(), ec);
+
+        std::string error;
+        ecu::writeDcm(
+            m_calibrationPath,
+            ecu::defaultCalibration(),
+            "Default calibration: ECU functions disabled (engine script behaviour)",
+            &error);
+    }
+
+    reloadCalibration();
+
+    m_ecuLearnPath = getEnvironmentString("ENGINE_SIM_ECU_LEARN");
+    if (!m_ecuLearnPath.empty()) {
+        m_ecu.setLearning(true);
+        m_ecuLearnSaveTimer = 10.0;
+    }
+
+    const std::string logPath = getEnvironmentString("ENGINE_SIM_ECU_LOG");
+    if (!logPath.empty()) {
+        m_ecuLog.open(logPath, std::ios::out);
+        m_ecuLog << "time_s,rpm,map_kPa,injection_ms,advance_deg,intake_afr,cylinder_lambda,throttle_percent,"
+            "dyno_torque_Nm,fuel_ecu,ignition_ecu\n";
+    }
+}
+
+void EngineSimApplication::reloadCalibration() {
+    std::error_code ec;
+    m_calibrationFileTime = std::filesystem::last_write_time(m_calibrationPath, ec);
+
+    ecu::CalibrationPage page = m_ecu.calibration().getWorkingPage();
+    std::vector<std::string> warnings;
+    std::string error;
+    if (!ecu::readDcm(m_calibrationPath, &page, &warnings, &error)) {
+        // Keep running with the previous calibration
+        m_infoCluster->setLogMessage("ECU: " + error);
+        return;
+    }
+
+    m_ecu.calibration().setWorkingPage(page);
+
+    std::string message = "ECU: calibration loaded (fuel ";
+    message += (page.EcuFuelEnable >= 0.5f) ? "ON" : "OFF";
+    message += ", ignition ";
+    message += (page.EcuIgnEnable >= 0.5f) ? "ON" : "OFF";
+    message += ")";
+    if (!warnings.empty()) {
+        message += " - " + warnings.front();
+    }
+
+    m_infoCluster->setLogMessage(message);
+}
+
+void EngineSimApplication::saveLearnedCalibration() {
+    int fuelColumns = 0, ignitionColumns = 0;
+    const ecu::CalibrationPage page = m_ecu.buildLearnedPage(&fuelColumns, &ignitionColumns);
+
+    std::string error;
+    const std::string comment =
+        "Learned from the engine script behaviour (steady-state points, linear fit\n"
+        "against MAP per RPM column): "
+        + std::to_string(fuelColumns) + " fuel and "
+        + std::to_string(ignitionColumns) + " ignition RPM columns learned";
+    if (!ecu::writeDcm(m_ecuLearnPath, page, comment, &error)) {
+        m_infoCluster->setLogMessage("ECU: " + error);
+    }
+}
+
+void EngineSimApplication::updateEcu(double dt) {
+    m_ecu.beginFrame();
+
+    // Reload the calibration file whenever it is saved
+    m_calibrationCheckTimer -= dt;
+    if (m_calibrationCheckTimer <= 0) {
+        m_calibrationCheckTimer = 0.5;
+
+        std::error_code ec;
+        const auto fileTime = std::filesystem::last_write_time(m_calibrationPath, ec);
+        if (!ec && fileTime != m_calibrationFileTime) {
+            reloadCalibration();
+        }
+    }
+
+    if (m_ecu.isLearning()) {
+        m_ecuLearnSaveTimer -= dt;
+        if (m_ecuLearnSaveTimer <= 0) {
+            m_ecuLearnSaveTimer = 10.0;
+            saveLearnedCalibration();
+        }
+    }
+
+    if (m_ecuLog.is_open() && m_iceEngine != nullptr) {
+        m_ecuLogTime += dt;
+        m_ecuLogTimer -= dt;
+        if (m_ecuLogTimer <= 0) {
+            m_ecuLogTimer = 0.05;
+
+            const ecu::Ecu::Measurements &m = m_ecu.getMeasurements();
+
+            m_ecuLog
+                << m_ecuLogTime << ","
+                << m.rpm << ","
+                << m.map_kPa << ","
+                << m.injectionTime_ms << ","
+                << m.advance_deg << ","
+                << m_iceEngine->getIntakeAfr() << ","
+                << m_iceEngine->getCylinderLambda() << ","
+                << m_speedSetting * 100.0 << ","
+                << units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) << ","
+                << (m.fuelActive ? 1 : 0) << ","
+                << (m.ignitionActive ? 1 : 0) << "\n";
+
+            // Keep the file usable even if the simulator is killed
+            if (++m_ecuLogLines % 20 == 0) m_ecuLog.flush();
+        }
     }
 }
 

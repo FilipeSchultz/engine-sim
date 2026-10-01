@@ -330,6 +330,19 @@ double Engine::getIntakeAfr() const {
     }
 }
 
+double Engine::getCylinderLambda() const {
+    double o2 = 0, fuel = 0;
+    for (int i = 0; i < m_cylinderCount; ++i) {
+        const GasSystem::Mix &mix = m_combustionChambers[i].m_flameEvent.globalMix;
+        o2 += mix.p_o2;
+        fuel += mix.p_fuel;
+    }
+
+    return (fuel > 0)
+        ? (o2 / fuel) / m_fuel.getMolecularAfr()
+        : 0.0;
+}
+
 double Engine::getExhaustO2() const {
     double totalInert = 0.0;
     double totalOxygen = 0.0;

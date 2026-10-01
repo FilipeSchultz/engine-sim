@@ -58,6 +58,10 @@ class Intake : public Part {
         double m_flowRate;
         double m_totalFuelInjected;
 
+        // Set by the ECU: when active, only air enters through the throttle; the
+        // fuel comes from the port injectors (CombustionChamber::m_ecuFuelRate)
+        bool m_ecuFuelActive;
+
     protected:
         double m_crossSectionArea;
         double m_inputFlowK;

@@ -35,6 +35,8 @@ CombustionChamber::CombustionChamber() {
     m_exhaustFlow = 0;
     m_exhaustFlowRate = 0;
     m_intakeFlowRate = 0;
+    m_ecuFuelRate = 0;
+    m_ecuPendingFuel = 0;
 
     m_fuel = nullptr;
 }
@@ -266,6 +268,24 @@ void CombustionChamber::flow(double dt) {
     GasSystem::flow(flowParams);
 
     m_intakeRunnerAndManifold.dissipateExcessVelocity();
+
+    // ECU sequential injection: delivered into the cylinder with the intake
+    // charge, after the exhaust valve has closed (during valve overlap it would
+    // be scavenged straight into the exhaust)
+    m_ecuPendingFuel += m_ecuFuelRate * dt;
+    if (m_ecuFuelRate <= 0) {
+        m_ecuPendingFuel = 0;
+    }
+    else if (m_intakeFlowRate > 0 && m_exhaustFlowRate <= 0 && m_ecuPendingFuel > 0) {
+        GasSystem::Mix pureFuel;
+        pureFuel.p_fuel = 1.0;
+        pureFuel.p_inert = 0.0;
+        pureFuel.p_o2 = 0.0;
+
+        m_system.gainN(m_ecuPendingFuel, m_system.kineticEnergyPerMol(), pureFuel);
+        intake->m_totalFuelInjected += m_ecuPendingFuel;
+        m_ecuPendingFuel = 0;
+    }
 
     flowParams.k_flow = m_intakeFlowRate;
     flowParams.crossSectionArea_0 = m_head->getIntakeRunnerCrossSectionArea();

@@ -14,6 +14,8 @@
 
 #include <chrono>
 
+namespace ecu { class Ecu; }
+
 class Simulator {
 public:
     enum class SystemType {
@@ -77,6 +79,10 @@ public:
 
     double filteredEngineSpeed() const { return m_filteredEngineSpeed; }
 
+    // Optional ECU, updated once per physics step (not owned)
+    void setEcu(ecu::Ecu *ecu) { m_ecu = ecu; }
+    ecu::Ecu *getEcu() const { return m_ecu; }
+
     Dynamometer m_dyno;
     StarterMotor m_starterMotor;
 
@@ -117,6 +123,8 @@ private:
     double m_filteredEngineSpeed;
 
     int m_steps;
+
+    ecu::Ecu *m_ecu = nullptr;
 };
 
 #endif /* ATG_ENGINE_SIM_SIMULATOR_H */

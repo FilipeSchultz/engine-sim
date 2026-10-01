@@ -14,6 +14,8 @@ IgnitionModule::IgnitionModule() {
     m_lastCrankshaftAngle = 0.0;
     m_enabled = false;
     m_revLimitTimer = 0.0;
+    m_advanceOverride = 0.0;
+    m_advanceOverrideEnabled = false;
     m_revLimit = 0;
     m_limiterDuration = 0;
 }
@@ -108,6 +110,12 @@ void IgnitionModule::resetIgnitionEvents() {
 }
 
 double IgnitionModule::getTimingAdvance() {
+    return m_advanceOverrideEnabled
+        ? m_advanceOverride
+        : getBaseTimingAdvance();
+}
+
+double IgnitionModule::getBaseTimingAdvance() {
     return m_timingCurve->sampleTriangle(-m_crankshaft->m_body.v_theta);
 }
 

@@ -15,6 +15,7 @@ Intake::Intake() {
     m_totalFuelInjected = 0;
     m_molecularAfr = 0;
     m_runnerLength = 0;
+    m_ecuFuelActive = false;
 }
 
 Intake::~Intake() {
@@ -61,14 +62,15 @@ void Intake::process(double dt) {
     const double ideal_afr = 0.8 * m_molecularAfr * 4;
     const double current_afr = (m_system.mix().p_o2 + m_system.mix().p_inert) / m_system.mix().p_fuel;
 
-    const double p_air = ideal_afr / (1 + ideal_afr);
+    // With ECU fuel control, both paths carry only air (p_air = 1)
+    const double p_air = m_ecuFuelActive ? 1.0 : ideal_afr / (1 + ideal_afr);
     GasSystem::Mix fuelAirMix;
     fuelAirMix.p_fuel = 1 - p_air;
     fuelAirMix.p_inert = p_air * 0.75;
     fuelAirMix.p_o2 = p_air * 0.25;
 
     const double idle_afr = 2.0;
-    const double p_idle_air = idle_afr / (1 + idle_afr);
+    const double p_idle_air = m_ecuFuelActive ? 1.0 : idle_afr / (1 + idle_afr);
     GasSystem::Mix fuelMix;
     fuelMix.p_fuel = (1.0 - p_idle_air);
     fuelMix.p_inert = p_idle_air * 0.75;
@@ -98,6 +100,9 @@ void Intake::process(double dt) {
 
     m_system.dissipateExcessVelocity();
     m_system.updateVelocity(dt, m_velocityDecay);
+
+    // With ECU fuel control the fuel is injected per cylinder (CombustionChamber::flow)
+    if (m_ecuFuelActive) return;
 
     if (m_flow > 0) {
         m_totalFuelInjected += fuelAirMix.p_fuel * m_flow;

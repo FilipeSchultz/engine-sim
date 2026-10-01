@@ -24,10 +24,13 @@
 #include "transmission.h"
 #include "can_interface.h"
 #include "avl_emcon.h"
+#include "ecu/ecu.h"
 
 #include "delta.h"
 #include "dtv.h"
 
+#include <filesystem>
+#include <fstream>
 #include <random>
 #include <vector>
 
@@ -98,11 +101,32 @@ class EngineSimApplication {
 
         void refreshUserInterface();
 
+        void initializeEcu();
+        void updateEcu(double dt);
+        void reloadCalibration();
+        void saveLearnedCalibration();
+
         void openCan();
         void updateCanReceive(double dt);
         void updateCanTransmit();
         void setCanRemote(bool remote);
         bool isCanRemote() const { return m_canRemote; }
+
+    protected:
+        // Virtual ECU and its calibration file (reloaded whenever it is saved)
+        ecu::Ecu m_ecu;
+        std::string m_calibrationPath;
+        std::filesystem::file_time_type m_calibrationFileTime;
+        double m_calibrationCheckTimer = 0.0;
+
+        // Optional: learned dataset output (ENGINE_SIM_ECU_LEARN) and CSV
+        // datalog (ENGINE_SIM_ECU_LOG)
+        std::string m_ecuLearnPath;
+        double m_ecuLearnSaveTimer = 0.0;
+        std::ofstream m_ecuLog;
+        double m_ecuLogTimer = 0.0;
+        double m_ecuLogTime = 0.0;
+        int m_ecuLogLines = 0;
 
     protected:
         CanInterface m_can;

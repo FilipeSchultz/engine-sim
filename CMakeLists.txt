@@ -93,6 +93,9 @@ add_library(engine-sim STATIC
     src/vehicle.cpp
     src/vehicle_drag_constraint.cpp
     src/vtec_valvetrain.cpp
+    src/ecu/calibration.cpp
+    src/ecu/dcm_file.cpp
+    src/ecu/ecu.cpp
 
     # Include files
     include/audio_buffer.h
@@ -138,6 +141,9 @@ add_library(engine-sim STATIC
     include/vehicle.h
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
+    include/ecu/calibration.h
+    include/ecu/dcm_file.h
+    include/ecu/ecu.h
 )
 
 target_link_libraries(engine-sim

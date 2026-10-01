@@ -2,5 +2,10 @@ import "engine_sim.mr"
 import "themes/default.mr"
 import "engines/atg-video-2/07_gm_ls.mr"
 
-use_default_theme()
+use_default_theme(
+    torque_units: "Nm",
+    power_units: "kW",
+    pressure_units: "kPa",
+    speed_units: "kph"
+)
 main()

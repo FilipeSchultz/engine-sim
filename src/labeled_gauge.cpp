@@ -41,7 +41,7 @@ void LabeledGauge::render() {
 
     drawCenteredText(m_title, title.inset(10.0f), 24.0f);
 
-    const double value = m_gauge->m_value;
+    const double value = m_gauge->m_value * m_displayScale;
 
     std::stringstream ss;
     ss << std::fixed << std::setprecision(m_precision);

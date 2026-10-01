@@ -90,6 +90,13 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         double m_peakTemperature;
         double m_nBurntFuel;
 
+        // Set by the ECU: fuel delivery for this cylinder [mol/s]. Sequential
+        // injection: the fuel accumulates while the intake valve is closed and
+        // enters with the intake charge while it is open, so none of it can
+        // flow back into the plenum
+        double m_ecuFuelRate;
+        double m_ecuPendingFuel;
+
     protected:
         double calculateFrictionForce(double v) const;
         void updateCycleStates();

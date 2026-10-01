@@ -39,6 +39,16 @@ class IgnitionModule : public Part {
 
         double getTimingAdvance();
 
+        // Advance from the engine script's timing curve, ignoring any override
+        double getBaseTimingAdvance();
+
+        // Used by the ECU to replace the timing curve
+        void setAdvanceOverride(double advance) {
+            m_advanceOverride = advance;
+            m_advanceOverrideEnabled = true;
+        }
+        void clearAdvanceOverride() { m_advanceOverrideEnabled = false; }
+
         bool m_enabled;
 
     protected:
@@ -53,6 +63,9 @@ class IgnitionModule : public Part {
         double m_revLimit;
         double m_revLimitTimer;
         double m_limiterDuration;
+
+        double m_advanceOverride;
+        bool m_advanceOverrideEnabled;
 };
 
 #endif /* ATG_ENGINE_SIM_IGNITION_MODULE_H */

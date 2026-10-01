@@ -68,6 +68,11 @@ class Engine : public Part {
 
         virtual double getManifoldPressure() const;
         virtual double getIntakeAfr() const;
+
+        // In-cylinder lambda at the last spark, averaged over the cylinders
+        // (same basis as the ignition limits in CombustionChamber::ignite).
+        // 0 when no cylinder has fired yet
+        virtual double getCylinderLambda() const;
         virtual double getExhaustO2() const;
         virtual double getRpm() const;
         virtual double getSpeed() const;

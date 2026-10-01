@@ -23,6 +23,10 @@ class LabeledGauge : public UiElement {
 
         int m_precision;
         bool m_spaceBeforeUnit;
+
+        // The gauge scale is integer; fractional quantities (e.g. lambda) are
+        // drawn scaled up and shown as m_value * m_displayScale
+        double m_displayScale = 1.0;
         std::string m_unit;
 
         float m_margin = 10.0f;

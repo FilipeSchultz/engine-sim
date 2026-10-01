@@ -2,6 +2,7 @@
 
 #include "../include/constants.h"
 #include "../include/units.h"
+#include "../include/ecu/ecu.h"
 
 #include <cmath>
 #include <assert.h>
@@ -282,6 +283,12 @@ void PistonEngineSimulator::placeCylinder(int i) {
 
 void PistonEngineSimulator::simulateStep_() {
     const double timestep = getTimestep();
+
+    // The ECU sets the spark advance and injector flow used by this step
+    if (getEcu() != nullptr) {
+        getEcu()->update(m_engine, timestep);
+    }
+
     IgnitionModule *im = m_engine->getIgnitionModule();
     im->update(timestep);
 
