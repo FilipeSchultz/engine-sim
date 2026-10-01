@@ -25,6 +25,8 @@
 #include "can_interface.h"
 #include "avl_emcon.h"
 #include "ecu/ecu.h"
+#include "indicating_system.h"
+#include "udp_sender.h"
 
 #include "delta.h"
 #include "dtv.h"
@@ -103,6 +105,11 @@ class EngineSimApplication {
 
         void initializeEcu();
         void updateEcu(double dt);
+        void initializeIndicating();
+        void attachIndicating();
+        void updateIndicating(double dt);
+        void sendIndicatingData();
+        void sendIndicatingInfo();
         void reloadCalibration();
         void saveLearnedCalibration();
 
@@ -127,6 +134,21 @@ class EngineSimApplication {
         double m_ecuLogTimer = 0.0;
         double m_ecuLogTime = 0.0;
         int m_ecuLogLines = 0;
+
+        // Combustion analysis per cycle (ENGINE_SIM_INDI_LOG) and raw cylinder
+        // pressure stream for the external indicating tool (ENGINE_SIM_INDI_UDP)
+        IndicatingSystem m_indicating;
+        std::ofstream m_indicatingLog;
+        int m_indicatingLogLines = 0;
+        UdpSender m_indicatingUdp;
+        uint32_t m_indicatingSequence = 0;
+        double m_indicatingInfoTimer = 0.0;
+
+        // Pressure sensor model: gaussian noise and a fixed offset per cylinder
+        // (piezo sensors only measure pressure changes; the tool must peg them)
+        double m_sensorNoise_bar = 0.0;
+        std::vector<float> m_sensorOffset_bar;
+        std::mt19937 m_sensorRng;
 
     protected:
         CanInterface m_can;

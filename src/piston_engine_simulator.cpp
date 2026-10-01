@@ -3,6 +3,7 @@
 #include "../include/constants.h"
 #include "../include/units.h"
 #include "../include/ecu/ecu.h"
+#include "../include/indicating_system.h"
 
 #include <cmath>
 #include <assert.h>
@@ -322,6 +323,10 @@ void PistonEngineSimulator::simulateStep_() {
         for (int j = 0; j < cylinderCount; ++j) {
             m_engine->getChamber(j)->flow(fluidTimestep);
         }
+    }
+
+    if (getIndicatingSystem() != nullptr) {
+        getIndicatingSystem()->sample(m_engine, timestep);
     }
 
     im->resetIgnitionEvents();

@@ -1,0 +1,112 @@
+* engine-sim ECU calibration dataset
+* Engine: Waukesha CFR F1 (assets/engines/cfr/cfr_f1.mr), simulation frequency 40 kHz
+* Learned from the engine script behaviour (steady-state points, linear fit
+* against MAP per RPM column): 16 fuel and 16 ignition RPM columns learned
+
+KONSERVIERUNG_FORMAT 2.0
+
+FESTWERT EcuFuelEnable
+   LANGNAME "Fuel from FuelBaseMap (0 = engine script mixture)"
+   EINHEIT_W "-"
+   WERT 1
+END
+
+FESTWERT EcuIgnEnable
+   LANGNAME "Spark advance from IgnAdvanceMap (0 = engine script curve)"
+   EINHEIT_W "-"
+   WERT 1
+END
+
+FESTWERT InjectorFlow
+   LANGNAME "Injector static flow"
+   EINHEIT_W "cc/min"
+   WERT 400
+END
+
+FESTWERT InjectorDeadTime
+   LANGNAME "Injector dead time"
+   EINHEIT_W "ms"
+   WERT 1
+END
+
+KENNFELD FuelBaseMap 16 12
+   LANGNAME "Base injection time"
+   EINHEIT_X "rpm"
+   EINHEIT_Y "kPa"
+   EINHEIT_W "ms"
+   ST/X      300      350      400      450      500      550      600      650      700      750      800      850      900     1000     1100     1200
+   ST/Y 10
+   WERT    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.077    0.191    0.000
+   ST/Y 15
+   WERT    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.081    0.000    0.056    0.361    0.641    0.760    0.570
+   ST/Y 20
+   WERT    0.000    0.000    0.000    0.000    0.000    0.370    0.394    0.383    0.469    0.660    0.542    0.716    0.982    1.205    1.328    1.280
+   ST/Y 30
+   WERT    0.000    0.000    0.000    0.000    0.000    1.329    1.416    1.532    1.676    1.787    1.784    1.897    2.079    2.388    2.525    2.646
+   ST/Y 40
+   WERT    0.000    0.000    0.219    0.962    1.461    2.114    2.224    2.576    2.754    2.874    3.050    3.308    3.328    3.548    3.767    3.844
+   ST/Y 50
+   WERT    0.000    0.871    1.886    2.510    2.924    3.273    3.651    3.801    4.006    4.333    4.470    4.564    4.603    4.858    5.075    5.212
+   ST/Y 60
+   WERT    1.266    2.801    3.811    3.996    4.517    4.767    4.994    5.420    5.434    5.619    6.550    6.054    6.129    6.309    6.369    6.548
+   ST/Y 70
+   WERT    3.775    4.737    5.215    5.695    6.089    6.350    6.661    6.898    7.093    7.225    7.504    7.552    7.565    7.870    8.015    8.162
+   ST/Y 80
+   WERT    6.266    6.837    7.278    7.751    8.141    8.351    8.520    8.690    8.899    9.088    9.244    9.363    9.492    9.617    9.702    9.807
+   ST/Y 90
+   WERT    8.987    9.509    9.981   10.148   10.304   10.499   10.704   10.916   11.094   11.190   11.252   11.300   11.354   11.874   11.563   11.748
+   ST/Y 100
+   WERT   14.425   13.816   13.687   14.235   13.986   13.869   13.851   13.815   13.775   13.727   13.685   13.620   13.615   13.105   13.578   13.552
+   ST/Y 105
+   WERT   16.957   15.669   15.284   16.101   15.609   15.337   15.221   15.092   14.980   14.867   14.772   14.659   14.693   13.543   14.557   14.489
+END
+
+KENNFELD IgnAdvanceMap 16 12
+   LANGNAME "Spark advance"
+   EINHEIT_X "rpm"
+   EINHEIT_Y "kPa"
+   EINHEIT_W "deg"
+   ST/X      300      350      400      450      500      550      600      650      700      750      800      850      900     1000     1100     1200
+   ST/Y 10
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 15
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 20
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 30
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 40
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 50
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 60
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 70
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 80
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 90
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 100
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+   ST/Y 105
+   WERT   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000   13.000
+END
+
+FESTWERT CrankingRpm
+   LANGNAME "Engine speed below which the engine is considered cranking"
+   EINHEIT_W "rpm"
+   WERT 200
+END
+
+FESTWERT CrankingFuelFactor
+   LANGNAME "Injection time multiplier while cranking (0 = start on the script mixture)"
+   EINHEIT_W "-"
+   WERT 1
+END
+
+FESTWERT AfterStartTime
+   LANGNAME "Time for the cranking factor to fade to 1 once the engine runs"
+   EINHEIT_W "s"
+   WERT 0
+END

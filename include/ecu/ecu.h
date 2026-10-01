@@ -4,6 +4,7 @@
 #include "calibration.h"
 
 class Engine;
+class Fuel;
 
 namespace ecu {
     // Virtual engine control unit. Runs once per physics step and applies the
@@ -53,19 +54,43 @@ namespace ecu {
             CalibrationPage buildLearnedPage(int *fuelColumns, int *ignitionColumns) const;
 
         private:
-            // Weighted linear regression of a value against MAP, one per RPM
-            // breakpoint: at fixed RPM the fuel per cycle is very close to
-            // linear in MAP (measured: within a few % from 10 to 100 kPa)
+            // Value against MAP for one RPM breakpoint: steady cycles are
+            // averaged in 2 kPa bins, then the curve is interpolated piecewise
+            // linearly between bins and extrapolated from the end segments.
+            // A single straight line is not enough: at low RPM the fuel per
+            // cycle has a knee (exhaust backflow at light load)
             struct ColumnFit {
-                double w = 0, wx = 0, wy = 0, wxx = 0, wxy = 0;
+                static constexpr double BinWidth = 2.0;     // [kPa]
+                static constexpr int Bins = 200;            // 0 .. 400 kPa
+
+                double w[Bins] = {};
+                double wx[Bins] = {};
+                double wy[Bins] = {};
 
                 void add(double weight, double x, double y);
                 bool valid() const;
                 double evaluate(double x) const;
             };
 
-            void learn(const CalibrationPage &cal, double scriptInjectionTime_ms, double scriptAdvance_deg);
-            static void addSample(ColumnFit *fits, const float *axisX, double rpm, double map_kPa, double value);
+            // Accumulates one engine cycle (720 deg) of the script behaviour
+            struct CycleAccumulator {
+                double angle = 0;           // [deg]
+                double fuel = 0;            // [mol]
+                double mapTime = 0;         // [kPa s]
+                double advanceTime = 0;     // [deg s]
+                double time = 0;            // [s]
+                int steps = 0;
+                double previousMap_kPa = -1;
+            };
+
+            void learn(
+                const CalibrationPage &cal,
+                int cylinderCount,
+                const Fuel *fuel,
+                double stepFuel,
+                double scriptAdvance_deg,
+                double dt);
+            static void addSample(ColumnFit *fits, const float *axisX, double rpm, double map_kPa, double value, double weight);
             static int fillMap(const ColumnFit *fits, const float *axisY, float values[][MapRpmPoints]);
 
             Calibration m_calibration;
@@ -80,13 +105,8 @@ namespace ecu {
             bool m_engineRunning;
             double m_runningTime;   // since the engine left cranking [s]
 
-            // Learning only uses steady manifold pressure: while the plenum is
-            // filling or emptying, the fuel entering it doesn't match the fuel
-            // reaching the cylinders
-            double m_lastMap_kPa;
-            double m_filteredMapRate;
-
             bool m_learning;
+            CycleAccumulator m_cycle;
             ColumnFit m_fuelFit[MapRpmPoints];
             ColumnFit m_ignitionFit[MapRpmPoints];
     };

@@ -186,6 +186,7 @@ void EngineSimApplication::initialize() {
         : ysAudioSource::Mode::Stop);
 
     initializeEcu();
+    initializeIndicating();
     openCan();
     m_audioSource->SetPan(0.0f);
     m_audioSource->SetVolume(1.0f);
@@ -394,6 +395,7 @@ void EngineSimApplication::run() {
         updateScreenSizeStability();
 
         updateEcu(m_engine.GetFrameLength());
+        updateIndicating(m_engine.GetFrameLength());
         updateCanReceive(m_engine.GetFrameLength());
         processEngineInput();
 
@@ -442,6 +444,8 @@ void EngineSimApplication::destroy() {
         saveLearnedCalibration();
     }
     m_ecuLog.close();
+    m_indicatingLog.close();
+    m_indicatingUdp.close();
 
     m_shaderSet.Destroy();
 
@@ -489,6 +493,7 @@ void EngineSimApplication::loadEngine(
     m_simulator = engine->createSimulator(vehicle, transmission);
     if (m_simulator != nullptr) {
         m_simulator->setEcu(&m_ecu);
+        attachIndicating();
     }
 
     if (engine == nullptr || vehicle == nullptr || transmission == nullptr) {
@@ -862,6 +867,191 @@ void EngineSimApplication::updateEcu(double dt) {
             if (++m_ecuLogLines % 20 == 0) m_ecuLog.flush();
         }
     }
+}
+
+void EngineSimApplication::initializeIndicating() {
+    const std::string path = getEnvironmentString("ENGINE_SIM_INDI_LOG");
+    if (!path.empty()) {
+        m_indicatingLog.open(path, std::ios::out);
+        if (m_indicatingLog.is_open()) {
+            // Angles in degrees relative to each cylinder's firing TDC (positive = after TDC)
+            m_indicatingLog
+                << "time_s,cycle,cylinder,rpm,map_kPa,spark_btdc_deg,pmax_bar,pmax_atdc_deg,"
+                << "imep_gross_bar,imep_net_bar,ca10_atdc_deg,ca50_atdc_deg,ca90_atdc_deg,"
+                << "burn_10_90_deg,ca50_reference_atdc_deg,misfire\n";
+        }
+        else {
+            m_infoCluster->setLogMessage("INDI: cannot write " + path);
+        }
+    }
+
+    const std::string address = getEnvironmentString("ENGINE_SIM_INDI_UDP");
+    if (!address.empty()) {
+        std::string error;
+        if (m_indicatingUdp.open(address, &error)) {
+            m_infoCluster->setLogMessage("INDI: streaming cylinder pressure to " + address);
+        }
+        else {
+            m_infoCluster->setLogMessage("INDI: " + error);
+        }
+    }
+
+    m_sensorNoise_bar = getEnvironmentDouble("ENGINE_SIM_INDI_NOISE_BAR", 0.0);
+    m_sensorRng.seed(std::random_device()());
+
+    // The first engine was loaded before this point
+    attachIndicating();
+}
+
+void EngineSimApplication::attachIndicating() {
+    if (m_simulator == nullptr) return;
+
+    const bool analysis = m_indicatingLog.is_open();
+    const bool stream = m_indicatingUdp.isOpen();
+    if (!analysis && !stream) return;
+
+    m_indicating.reset();
+    m_indicating.setAnalysis(analysis);
+    m_indicating.setRawCapture(stream);
+    m_simulator->setIndicatingSystem(&m_indicating);
+
+    // Each sensor gets its own fixed offset in +/- ENGINE_SIM_INDI_OFFSET_BAR
+    const double offset = getEnvironmentDouble("ENGINE_SIM_INDI_OFFSET_BAR", 0.0);
+    std::uniform_real_distribution<double> distribution(-offset, offset);
+    m_sensorOffset_bar.clear();
+    for (int i = 0; i < m_iceEngine->getCylinderCount(); ++i) {
+        m_sensorOffset_bar.push_back(static_cast<float>((offset > 0) ? distribution(m_sensorRng) : 0.0));
+    }
+}
+
+void EngineSimApplication::updateIndicating(double dt) {
+    if (m_iceEngine == nullptr) return;
+
+    if (m_indicatingUdp.isOpen()) {
+        sendIndicatingData();
+
+        m_indicatingInfoTimer -= dt;
+        if (m_indicatingInfoTimer <= 0) {
+            m_indicatingInfoTimer = 1.0;
+            sendIndicatingInfo();
+        }
+    }
+
+    if (!m_indicatingLog.is_open()) return;
+
+    const double map_kPa = units::convert(m_iceEngine->getManifoldPressure(), units::kPa);
+
+    IndicatingSystem::CycleResult r;
+    while (m_indicating.popResult(&r)) {
+        m_indicatingLog << r.time << "," << r.cycle << "," << r.cylinder << ","
+            << r.rpm << "," << map_kPa << ",";
+
+        if (r.sparkValid) m_indicatingLog << r.sparkAdvance_deg;
+        m_indicatingLog << ","
+            << r.pmax_bar << "," << r.pmaxAngle_deg << ","
+            << r.imepGross_bar << "," << r.imepNet_bar << ",";
+
+        if (!r.misfire) {
+            m_indicatingLog
+                << r.ca10_deg << "," << r.ca50_deg << "," << r.ca90_deg << ","
+                << r.ca90_deg - r.ca10_deg << "," << r.ca50Reference_deg;
+        }
+        else {
+            m_indicatingLog << ",,,,";
+        }
+
+        m_indicatingLog << "," << (r.misfire ? 1 : 0) << "\n";
+
+        if (++m_indicatingLogLines % 50 == 0) m_indicatingLog.flush();
+    }
+}
+
+namespace {
+    // Indicating stream packet header, see docs/indicom_protocol.md
+    constexpr uint8_t IndicatingProtocolVersion = 1;
+    constexpr uint8_t IndicatingPacketData = 1;
+    constexpr uint8_t IndicatingPacketInfo = 2;
+    constexpr size_t IndicatingMaxPacket = 1400;
+    constexpr size_t IndicatingHeaderSize = 16;
+
+    template <typename T>
+    void put(std::vector<uint8_t> *buffer, T value) {
+        const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&value);
+        buffer->insert(buffer->end(), bytes, bytes + sizeof(T));
+    }
+
+    void putHeader(std::vector<uint8_t> *buffer, uint8_t type, uint16_t cylinders, uint32_t sequence, uint16_t count) {
+        buffer->clear();
+        buffer->push_back('E');
+        buffer->push_back('S');
+        buffer->push_back('I');
+        buffer->push_back('N');
+        buffer->push_back(IndicatingProtocolVersion);
+        buffer->push_back(type);
+        put<uint16_t>(buffer, cylinders);
+        put<uint32_t>(buffer, sequence);
+        put<uint16_t>(buffer, count);
+        put<uint16_t>(buffer, 0);
+    }
+}
+
+void EngineSimApplication::sendIndicatingData() {
+    std::vector<float> &raw = m_indicating.rawSamples();
+    const int cylinders = m_indicating.getCylinderCount();
+    if (cylinders == 0 || raw.empty()) {
+        raw.clear();
+        return;
+    }
+
+    const size_t recordSize = 1 + cylinders;
+    const size_t records = raw.size() / recordSize;
+    const size_t perPacket = (IndicatingMaxPacket - IndicatingHeaderSize) / (recordSize * sizeof(float));
+
+    std::normal_distribution<float> noise(0.0f, static_cast<float>(m_sensorNoise_bar));
+    std::vector<uint8_t> packet;
+    packet.reserve(IndicatingMaxPacket);
+
+    for (size_t first = 0; first < records; first += perPacket) {
+        const size_t count = (std::min)(perPacket, records - first);
+        putHeader(&packet, IndicatingPacketData, (uint16_t)cylinders, m_indicatingSequence++, (uint16_t)count);
+
+        for (size_t r = first; r < first + count; ++r) {
+            const float *record = &raw[r * recordSize];
+            put<float>(&packet, record[0]);
+            for (int c = 0; c < cylinders; ++c) {
+                float p = record[1 + c];
+                if (c < (int)m_sensorOffset_bar.size()) p += m_sensorOffset_bar[c];
+                if (m_sensorNoise_bar > 0) p += noise(m_sensorRng);
+                put<float>(&packet, p);
+            }
+        }
+
+        m_indicatingUdp.send(packet.data(), packet.size());
+    }
+
+    raw.clear();
+}
+
+void EngineSimApplication::sendIndicatingInfo() {
+    const IndicatingSystem::EngineInfo &info = m_indicating.getEngineInfo();
+    if (info.cylinders == 0) return;
+
+    std::vector<uint8_t> packet;
+    putHeader(&packet, IndicatingPacketInfo, (uint16_t)info.cylinders, m_indicatingSequence++, 0);
+    put<float>(&packet, (float)info.bore_mm);
+    put<float>(&packet, (float)info.stroke_mm);
+    put<float>(&packet, (float)info.rodLength_mm);
+    put<float>(&packet, (float)info.compressionRatio);
+    put<float>(&packet, (float)m_simulator->getSimulationFrequency());
+    for (int i = 0; i < info.cylinders; ++i) {
+        put<float>(&packet, (i < (int)info.tdcEncoderAngle_deg.size()) ? (float)info.tdcEncoderAngle_deg[i] : -1.0f);
+    }
+
+    const std::string name = info.name.substr(0, 255);
+    packet.push_back((uint8_t)name.size());
+    packet.insert(packet.end(), name.begin(), name.end());
+
+    m_indicatingUdp.send(packet.data(), packet.size());
 }
 
 void EngineSimApplication::openCan() {

@@ -1,0 +1,289 @@
+import "engine_sim.mr"
+
+// Waukesha CFR F1/F2 research engine (octane rating, ASTM D2699 / D2700)
+//
+// Published data used:
+//   bore 3.25 in (82.55 mm), stroke 4.50 in (114.3 mm), 611.7 cc
+//   connecting rod 10.0 in (254 mm)
+//   variable compression ratio 4:1 .. 18:1 (cylinder raised/lowered)
+//   valve timing: intake opens 10 deg ATDC, closes 34 deg ABDC
+//                 exhaust opens 40 deg BBDC, closes 15 deg ATDC
+//   speed held by a synchronous motor: 600 rpm (RON) / 900 rpm (MON)
+//   RON spark timing: fixed 13 deg BTDC
+//
+// Approximations (no published figures at hand): valve lift and port flow,
+// masses and inertias, intake and exhaust volumes. Run it like the real
+// engine: hold the speed with the dyno (speed mode) and vary load, spark,
+// mixture and compression ratio.
+
+units units()
+constants constants()
+impulse_response_library ir_lib()
+
+private node wires {
+    output wire1: ignition_wire();
+}
+
+private node cfr_camshaft {
+    input intake_lobe_profile;
+    input exhaust_lobe_profile;
+    input intake_lobe_center;
+    input exhaust_lobe_center;
+    input base_radius: 18 * units.mm;
+
+    output intake_cam: _intake_cam;
+    output exhaust_cam: _exhaust_cam;
+
+    camshaft_parameters params(
+        advance: 0.0 * units.deg,
+        base_radius: base_radius
+    )
+
+    camshaft _intake_cam(params, lobe_profile: intake_lobe_profile)
+    camshaft _exhaust_cam(params, lobe_profile: exhaust_lobe_profile)
+
+    label rot360(360 * units.deg)
+
+    // Overlap TDC at 360 deg, firing TDC at 0 / 720 deg
+    _exhaust_cam.add_lobe(rot360 - exhaust_lobe_center)
+    _intake_cam.add_lobe(rot360 + intake_lobe_center)
+}
+
+private node cfr_head {
+    input intake_camshaft;
+    input exhaust_camshaft;
+    input chamber_volume;
+    input flip_display: false;
+    alias output __out: head;
+
+    // Port flow [CFM @ 28 inH2O] vs lift [thou] (approximation; the CFR intake
+    // valve is shrouded to create swirl, which limits its flow)
+    function intake_flow(50 * units.thou)
+    intake_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(50, 28)
+        .add_flow_sample(100, 52)
+        .add_flow_sample(150, 72)
+        .add_flow_sample(200, 86)
+        .add_flow_sample(250, 94)
+        .add_flow_sample(300, 97)
+
+    function exhaust_flow(50 * units.thou)
+    exhaust_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(50, 25)
+        .add_flow_sample(100, 47)
+        .add_flow_sample(150, 64)
+        .add_flow_sample(200, 76)
+        .add_flow_sample(250, 83)
+        .add_flow_sample(300, 86)
+
+    generic_cylinder_head head(
+        chamber_volume: chamber_volume,
+        intake_runner_volume: 120.0 * units.cc,
+        intake_runner_cross_section_area: circle_area(0.65 * units.inch),
+        exhaust_runner_volume: 100.0 * units.cc,
+        exhaust_runner_cross_section_area: circle_area(0.6 * units.inch),
+
+        intake_port_flow: intake_flow,
+        exhaust_port_flow: exhaust_flow,
+        valvetrain: standard_valvetrain(
+            intake_camshaft: intake_camshaft,
+            exhaust_camshaft: exhaust_camshaft
+        ),
+        flip_display: flip_display
+    )
+}
+
+public node cfr_f1 {
+    // Change to set the engine's compression ratio (4 .. 18)
+    input compression_ratio: 8.0;
+
+    // RON test: fixed spark advance
+    input spark_advance: 13 * units.deg;
+
+    alias output __out: engine;
+
+    engine engine(
+        name: "Waukesha CFR F1 [1 cyl, research]",
+        starter_torque: 60 * units.lb_ft,
+        starter_speed: 300 * units.rpm,
+        redline: 1200 * units.rpm,
+        dyno_min_speed: 300 * units.rpm,
+        dyno_max_speed: 1200 * units.rpm,
+        dyno_hold_step: 50 * units.rpm,
+        fuel: fuel(
+            max_burning_efficiency: 1.0
+        ),
+        // Spreads the pedal over the useful throttle range
+        throttle_gamma: 2.0,
+        hf_gain: 0.003,
+        noise: 0.3,
+        jitter: 0.3,
+        // 1 cylinder is cheap: at 600 rpm this gives 0.09 deg per sample
+        simulation_frequency: 40000
+    )
+
+    wires wires()
+
+    label bore(82.55 * units.mm)
+    label stroke(114.3 * units.mm)
+    label rod_length(254.0 * units.mm)
+    label compression_height(45 * units.mm)
+    label displacement(constants.pi * bore * bore / 4.0 * stroke)
+
+    // The CFR has a very heavy flywheel (it is belted to a synchronous motor)
+    label crank_mass(15 * units.kg)
+    label flywheel_mass(40 * units.kg)
+    label flywheel_radius(250 * units.mm)
+
+    crankshaft c0(
+        throw: stroke / 2,
+        flywheel_mass: flywheel_mass,
+        mass: crank_mass,
+        friction_torque: 8.0 * units.lb_ft,
+        moment_of_inertia:
+            disk_moment_of_inertia(mass: crank_mass, radius: stroke / 2)
+            + disk_moment_of_inertia(mass: flywheel_mass, radius: flywheel_radius),
+        position_x: 0.0,
+        position_y: 0.0,
+        tdc: constants.pi / 2
+    )
+
+    rod_journal rj0(angle: 0.0)
+    c0.add_rod_journal(rj0)
+
+    piston_parameters piston_params(
+        mass: 1100 * units.g,
+        compression_height: compression_height,
+        wrist_pin_position: 0.0,
+        displacement: 0.0
+    )
+
+    label rod_mass(1300 * units.g)
+    connecting_rod_parameters cr_params(
+        mass: rod_mass,
+        moment_of_inertia: rod_moment_of_inertia(mass: rod_mass, length: rod_length),
+        center_of_mass: 0.0,
+        length: rod_length
+    )
+
+    cylinder_bank_parameters bank_params(
+        bore: bore,
+        deck_height: stroke / 2 + rod_length + compression_height
+    )
+
+    // Carburettor intake. The plenum is kept small so the manifold pressure
+    // settles within a second even at 300 rpm. The flow rate is sized for a
+    // 0.6 L engine at <= 1200 rpm so the throttle actually controls the load
+    // (the RON test itself always runs wide open)
+    intake intake(
+        plenum_volume: 1.0 * units.L,
+        plenum_cross_section_area: 20.0 * units.cm2,
+        intake_flow_rate: k_carb(15.0),
+        runner_flow_rate: k_carb(120.0),
+        runner_length: 16.0 * units.inch,
+        idle_flow_rate: k_carb(0.0),
+        idle_throttle_plate_position: 0.99,
+        velocity_decay: 0.5
+    )
+
+    exhaust_system_parameters es_params(
+        outlet_flow_rate: k_carb(300.0),
+        primary_tube_length: 24.0 * units.inch,
+        primary_flow_rate: k_carb(150.0),
+        velocity_decay: 0.5,
+        volume: 10.0 * units.L
+    )
+
+    exhaust_system exhaust0(
+        es_params,
+        audio_volume: 1.0,
+        impulse_response: ir_lib.mild_exhaust_0_reverb
+    )
+
+    cylinder_bank b0(bank_params, angle: 0 * units.deg)
+    b0.add_cylinder(
+        piston: piston(piston_params, blowby: k_28inH2O(0.05)),
+        connecting_rod: connecting_rod(cr_params),
+        rod_journal: rj0,
+        intake: intake,
+        exhaust_system: exhaust0,
+        ignition_wire: wires.wire1
+    )
+
+    engine.add_cylinder_bank(b0)
+    engine.add_crankshaft(c0)
+
+    // Valve events (seat timing): intake 10 ATDC -> 34 ABDC = 204 deg, centred
+    // 112 deg ATDC; exhaust 40 BBDC -> 15 ATDC = 235 deg, centred 102.5 deg BTDC.
+    // Durations at 0.050 in are a bit shorter than the seat timing.
+    harmonic_cam_lobe intake_lobe(
+        duration_at_50_thou: 190 * units.deg,
+        gamma: 1.0,
+        lift: 0.25 * units.inch,
+        steps: 100
+    )
+
+    harmonic_cam_lobe exhaust_lobe(
+        duration_at_50_thou: 220 * units.deg,
+        gamma: 1.0,
+        lift: 0.25 * units.inch,
+        steps: 100
+    )
+
+    cfr_camshaft camshaft(
+        intake_lobe_profile: intake_lobe,
+        exhaust_lobe_profile: exhaust_lobe,
+        intake_lobe_center: 112 * units.deg,
+        exhaust_lobe_center: 102.5 * units.deg
+    )
+
+    b0.set_cylinder_head(
+        cfr_head(
+            chamber_volume: displacement / (compression_ratio - 1),
+            intake_camshaft: camshaft.intake_cam,
+            exhaust_camshaft: camshaft.exhaust_cam
+        )
+    )
+
+    function timing_curve(1000 * units.rpm)
+    timing_curve
+        .add_sample(0 * units.rpm, spark_advance)
+        .add_sample(1000 * units.rpm, spark_advance)
+        .add_sample(2000 * units.rpm, spark_advance)
+
+    engine.add_ignition_module(
+        ignition_module(
+            timing_curve: timing_curve,
+            rev_limit: 1300 * units.rpm,
+            limiter_duration: 0.1
+        )
+        .connect_wire(wires.wire1, 0 * units.deg)
+    )
+}
+
+// Stationary engine: the dyno does the work, the "vehicle" is only a load stub
+private node cfr_transmission {
+    alias output __out:
+        transmission(max_clutch_torque: 200 * units.lb_ft)
+        .add_gear(1.0);
+}
+
+private node cfr_vehicle {
+    alias output __out:
+        vehicle(
+            mass: 1000 * units.kg,
+            drag_coefficient: 0.3,
+            cross_sectional_area: (1 * units.m) * (1 * units.m),
+            diff_ratio: 3.0,
+            tire_radius: 0.3 * units.m,
+            rolling_resistance: 200 * units.N
+        );
+}
+
+public node main {
+    set_engine(cfr_f1())
+    set_vehicle(cfr_vehicle())
+    set_transmission(cfr_transmission())
+}

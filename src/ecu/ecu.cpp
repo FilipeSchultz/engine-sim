@@ -6,11 +6,12 @@
 #include <cmath>
 
 namespace {
-    // Minimum learning weight (about 0.1 s at 10 kHz) for an RPM column to count as learned
-    constexpr double MinLearnedWeight = 1000.0;
+    // Minimum learning weight (simulation steps, about 0.1 s at 20 kHz) for a
+    // MAP bin to be used
+    constexpr double MinBinWeight = 2000.0;
 
-    // Below this MAP variance [kPa^2] a column has no usable slope and uses its mean
-    constexpr double MinMapVariance = 4.0;
+    // End segments used for extrapolation span at least this much MAP [kPa]
+    constexpr double MinExtrapolationSpan = 10.0;
 
     // Fuel mass delivered by one injection of the given length
     double injectionMass(const ecu::CalibrationPage &cal, double fuelDensity, double injectionTime_ms) {
@@ -27,36 +28,64 @@ namespace {
 }
 
 void ecu::Ecu::ColumnFit::add(double weight, double x, double y) {
-    w += weight;
-    wx += weight * x;
-    wy += weight * y;
-    wxx += weight * x * x;
-    wxy += weight * x * y;
+    const int bin = (int)std::floor(x / BinWidth);
+    if (bin < 0 || bin >= Bins || weight <= 0) return;
+
+    w[bin] += weight;
+    wx[bin] += weight * x;
+    wy[bin] += weight * y;
 }
 
 bool ecu::Ecu::ColumnFit::valid() const {
-    return w >= MinLearnedWeight;
+    for (int b = 0; b < Bins; ++b) {
+        if (w[b] >= MinBinWeight) return true;
+    }
+
+    return false;
 }
 
 double ecu::Ecu::ColumnFit::evaluate(double x) const {
-    const double denominator = w * wxx - wx * wx;
-    if (denominator <= MinMapVariance * w * w) {
-        return wy / w;
+    // Learned points (bin averages), in increasing MAP
+    double px[Bins], py[Bins];
+    int n = 0;
+    for (int b = 0; b < Bins; ++b) {
+        if (w[b] < MinBinWeight) continue;
+        px[n] = wx[b] / w[b];
+        py[n] = wy[b] / w[b];
+        ++n;
     }
 
-    const double slope = (w * wxy - wx * wy) / denominator;
-    const double intercept = (wy - slope * wx) / w;
-    return intercept + slope * x;
+    if (n == 0) return 0.0;
+    if (n == 1) return py[0];
+
+    auto line = [&](int i, int j) {
+        return py[i] + (py[j] - py[i]) * (x - px[i]) / (px[j] - px[i]);
+    };
+
+    if (x <= px[0]) {
+        int j = 1;
+        while (j < n - 1 && px[j] - px[0] < MinExtrapolationSpan) ++j;
+        return line(0, j);
+    }
+    if (x >= px[n - 1]) {
+        int i = n - 2;
+        while (i > 0 && px[n - 1] - px[i] < MinExtrapolationSpan) --i;
+        return line(i, n - 1);
+    }
+
+    int k = 1;
+    while (px[k] < x) ++k;
+    return line(k - 1, k);
 }
 
-void ecu::Ecu::addSample(ColumnFit *fits, const float *axisX, double rpm, double map_kPa, double value) {
+void ecu::Ecu::addSample(ColumnFit *fits, const float *axisX, double rpm, double map_kPa, double value, double weight) {
     // Each sample feeds the two neighbouring RPM columns, weighted by distance
     int i;
     float t;
     locateOnAxis(axisX, MapRpmPoints, (float)rpm, &i, &t);
 
-    fits[i].add(1.0 - t, map_kPa, value);
-    fits[i + 1].add(t, map_kPa, value);
+    fits[i].add(weight * (1.0 - t), map_kPa, value);
+    fits[i + 1].add(weight * t, map_kPa, value);
 }
 
 int ecu::Ecu::fillMap(const ColumnFit *fits, const float *axisY, float values[][MapRpmPoints]) {
@@ -96,8 +125,6 @@ ecu::Ecu::Ecu() {
     m_filteredScriptInjectionTime = 0;
     m_engineRunning = false;
     m_runningTime = 0;
-    m_lastMap_kPa = 0;
-    m_filteredMapRate = 0;
     m_learning = false;
     resetLearning();
 }
@@ -121,12 +148,6 @@ void ecu::Ecu::update(Engine *engine, double dt) {
     m_measurements.rpm = rpm;
     m_measurements.map_kPa = map_kPa;
 
-    if (dt > 0) {
-        const double mapRate = (map_kPa - m_lastMap_kPa) / dt;
-        const double alpha = dt / (dt + 0.05);
-        m_filteredMapRate += alpha * (mapRate - m_filteredMapRate);
-    }
-    m_lastMap_kPa = map_kPa;
     if (rpm > cal.CrankingRpm) m_engineRunning = true;
     else if (rpm < 0.25 * cal.CrankingRpm) m_engineRunning = false;
     const bool cranking = !m_engineRunning;
@@ -219,23 +240,57 @@ void ecu::Ecu::update(Engine *engine, double dt) {
         m_filteredScriptInjectionTime += alpha * (scriptInjectionTime_ms - m_filteredScriptInjectionTime);
         m_measurements.injectionTime_ms = m_filteredScriptInjectionTime;
 
-        constexpr double MaxSteadyMapRate = 10.0;   // [kPa/s]
-        if (m_learning
-            && rpm > 300
-            && ignitionModule->m_enabled
-            && std::abs(m_filteredMapRate) < MaxSteadyMapRate)
-        {
-            learn(cal, scriptInjectionTime_ms, scriptAdvance_deg);
+        if (m_learning && m_engineRunning && ignitionModule->m_enabled) {
+            learn(cal, cylinderCount, fuel, stepFuel, scriptAdvance_deg, dt);
+        }
+        else {
+            m_cycle = CycleAccumulator();
         }
     }
 }
 
-void ecu::Ecu::learn(const CalibrationPage &cal, double scriptInjectionTime_ms, double scriptAdvance_deg) {
-    addSample(m_fuelFit, cal.FuelBaseMap_X, m_measurements.rpm, m_measurements.map_kPa, scriptInjectionTime_ms);
+void ecu::Ecu::learn(
+    const CalibrationPage &cal,
+    int cylinderCount,
+    const Fuel *fuel,
+    double stepFuel,
+    double scriptAdvance_deg,
+    double dt)
+{
+    // Manifold pressure and fuel flow pulse within each cycle (strongly with
+    // few cylinders), so learning works on whole 720 deg cycles
+    m_cycle.angle += m_measurements.rpm * 6.0 * dt;
+    m_cycle.fuel += stepFuel;
+    m_cycle.mapTime += m_measurements.map_kPa * dt;
+    m_cycle.advanceTime += scriptAdvance_deg * dt;
+    m_cycle.time += dt;
+    ++m_cycle.steps;
 
-    if (m_measurements.ignitionActive) return;
+    if (m_cycle.angle < 720.0) return;
 
-    addSample(m_ignitionFit, cal.IgnAdvanceMap_X, m_measurements.rpm, m_measurements.map_kPa, scriptAdvance_deg);
+    const double map_kPa = m_cycle.mapTime / m_cycle.time;
+    const double rpm = m_cycle.angle / (6.0 * m_cycle.time);
+    const double advance_deg = m_cycle.advanceTime / m_cycle.time;
+    const double massPerInjection = m_cycle.fuel * fuel->getMolecularMass() / cylinderCount;
+    const double injectionTime_ms = injectionTimeForMass(cal, fuel->getDensity(), massPerInjection);
+
+    // Steady state: the cycle-average MAP hasn't moved since the previous cycle
+    constexpr double MaxCycleMapChange = 1.0;   // [kPa]
+    const bool steady =
+        m_cycle.previousMap_kPa >= 0
+        && std::abs(map_kPa - m_cycle.previousMap_kPa) < MaxCycleMapChange;
+
+    if (steady) {
+        const double weight = m_cycle.steps;
+        addSample(m_fuelFit, cal.FuelBaseMap_X, rpm, map_kPa, injectionTime_ms, weight);
+        if (!m_measurements.ignitionActive) {
+            addSample(m_ignitionFit, cal.IgnAdvanceMap_X, rpm, map_kPa, advance_deg, weight);
+        }
+    }
+
+    const double previousMap = map_kPa;
+    m_cycle = CycleAccumulator();
+    m_cycle.previousMap_kPa = previousMap;
 }
 
 void ecu::Ecu::resetLearning() {

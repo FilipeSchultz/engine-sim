@@ -54,6 +54,8 @@ class CombustionChamber : public atg_scs::ForceGenerator {
 
         CylinderHead *getCylinderHead() const { return m_head; }
         Piston *getPiston() const { return m_piston; }
+        bool isIntakeValveOpen() const { return m_intakeFlowRate > 0; }
+        bool isExhaustValveOpen() const { return m_exhaustFlowRate > 0; }
 
         double getFrictionForce() const;
         double getVolume() const;

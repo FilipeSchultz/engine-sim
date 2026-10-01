@@ -15,6 +15,7 @@
 #include <chrono>
 
 namespace ecu { class Ecu; }
+class IndicatingSystem;
 
 class Simulator {
 public:
@@ -83,6 +84,10 @@ public:
     void setEcu(ecu::Ecu *ecu) { m_ecu = ecu; }
     ecu::Ecu *getEcu() const { return m_ecu; }
 
+    // Optional combustion analysis, sampled once per physics step (not owned)
+    void setIndicatingSystem(IndicatingSystem *indicating) { m_indicating = indicating; }
+    IndicatingSystem *getIndicatingSystem() const { return m_indicating; }
+
     Dynamometer m_dyno;
     StarterMotor m_starterMotor;
 
@@ -125,6 +130,7 @@ private:
     int m_steps;
 
     ecu::Ecu *m_ecu = nullptr;
+    IndicatingSystem *m_indicating = nullptr;
 };
 
 #endif /* ATG_ENGINE_SIM_SIMULATOR_H */

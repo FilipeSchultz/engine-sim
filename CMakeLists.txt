@@ -96,6 +96,7 @@ add_library(engine-sim STATIC
     src/ecu/calibration.cpp
     src/ecu/dcm_file.cpp
     src/ecu/ecu.cpp
+    src/indicating_system.cpp
 
     # Include files
     include/audio_buffer.h
@@ -144,6 +145,7 @@ add_library(engine-sim STATIC
     include/ecu/calibration.h
     include/ecu/dcm_file.h
     include/ecu/ecu.h
+    include/indicating_system.h
 )
 
 target_link_libraries(engine-sim
@@ -251,6 +253,7 @@ add_executable(engine-sim-app WIN32
     src/info_cluster.cpp
     src/can_interface.cpp
     src/avl_emcon.cpp
+    src/udp_sender.cpp
 
     # Include files
     include/delta.h
@@ -288,6 +291,7 @@ add_executable(engine-sim-app WIN32
     include/info_cluster.h
     include/can_interface.h
     include/avl_emcon.h
+    include/udp_sender.h
 )
 
 target_link_libraries(engine-sim-app
