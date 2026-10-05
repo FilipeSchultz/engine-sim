@@ -111,7 +111,7 @@ namespace es_script {
             meanPistonSpeedToTurbulence->initialize(30, 1);
             for (int i = 0; i < 30; ++i) {
                 const double s = (double)i;
-                meanPistonSpeedToTurbulence->addSample(s, s * 0.5);
+                meanPistonSpeedToTurbulence->addSample(s, s * m_turbulenceRatio);
             }
 
             Fuel *fuel = engine->getFuel();
@@ -123,11 +123,25 @@ namespace es_script {
             ccParams.StartingPressure = units::pressure(1.0, units::atm);
             ccParams.StartingTemperature = units::celcius(25.0);
             ccParams.MeanPistonSpeedToTurbulence = meanPistonSpeedToTurbulence;
+            ccParams.WallHeatTransfer = m_wallHeatTransfer;
+            ccParams.WallTemperature = m_wallTemperature;
+            ccParams.FlameModel = m_flameModel;
+            ccParams.SparkPlugOffset = m_sparkPlugOffset;
+            ccParams.CycleVariation = m_cycleVariation;
+            ccParams.GasModel = m_gasModel;
+            ccParams.MixtureNonuniformity = m_mixtureNonuniformity;
 
             for (int i = 0; i < engine->getCylinderCount(); ++i) {
                 ccParams.Piston = engine->getPiston(i);
                 ccParams.Head = engine->getHead(ccParams.Piston->getCylinderBank()->getIndex());
                 engine->getChamber(i)->initialize(ccParams);
+            }
+
+            for (int i = 0; i < engine->getIntakeCount(); ++i) {
+                engine->getIntake(i)->setHeatCapacityModel(m_gasModel);
+            }
+            for (int i = 0; i < engine->getExhaustSystemCount(); ++i) {
+                engine->getExhaustSystem(i)->setHeatCapacityModel(m_gasModel);
             }
         }
 
@@ -164,6 +178,16 @@ namespace es_script {
             addInput("hf_gain", &m_parameters.initialHighFrequencyGain);
             addInput("jitter", &m_parameters.initialJitter);
             addInput("noise", &m_parameters.initialNoise);
+            addInput("injector_flow", &m_parameters.injectorFlow_ccmin);
+            addInput("injector_dead_time", &m_parameters.injectorDeadTime_ms);
+            addInput("turbulence_ratio", &m_turbulenceRatio);
+            addInput("wall_heat_transfer", &m_wallHeatTransfer);
+            addInput("wall_temperature", &m_wallTemperature);
+            addInput("flame_model", &m_flameModel);
+            addInput("spark_plug_offset", &m_sparkPlugOffset);
+            addInput("cycle_variation", &m_cycleVariation);
+            addInput("gas_model", &m_gasModel);
+            addInput("mixture_nonuniformity", &m_mixtureNonuniformity);
 
             ObjectReferenceNode<EngineNode>::registerInputs();
         }
@@ -180,6 +204,14 @@ namespace es_script {
         FuelNode *m_fuel = nullptr;
 
         Engine::Parameters m_parameters;
+        double m_turbulenceRatio = 0.5;     // turbulence intensity / mean piston speed
+        double m_wallHeatTransfer = 0.0;    // Hohenberg multiplier, 0 = original model
+        double m_wallTemperature = units::celcius(90.0);    // mean combustion chamber surface
+        int m_flameModel = 0;               // 0 = original, 1 = flame speed updated every step, 2 = spherical
+        double m_sparkPlugOffset = 0.0;     // flame model 2: radial plug position / bore radius
+        double m_cycleVariation = 0.0;      // flame model 2: std. deviation of the turbulence per cycle
+        int m_gasModel = 0;                 // 0 = constant gamma, 1 = variable heat capacities + rich chemistry
+        double m_mixtureNonuniformity = 0.1;    // gas model 1: std. deviation of local phi / phi
         std::vector<CrankshaftNode *> m_crankshafts;
         std::vector<CylinderBankNode *> m_cylinderBanks;
     };

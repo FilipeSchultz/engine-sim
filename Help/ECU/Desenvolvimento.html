@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Estender a ECU</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Estender a ECU</h1>
+  <p class="subtitulo">Adicionar uma correção, uma função, um sensor ou um atuador (para desenvolvedores)</p>
+
+  <h2>Onde fica cada coisa</h2>
+  <table>
+    <tr><th>Arquivo</th><th>Conteúdo</th></tr>
+    <tr><td><code>ecu/include/ecu/io.h</code></td><td>A fronteira: <code>EcuConfig</code> (cilindros, PMS de combustão), <code>EcuInputs</code> (sensores), <code>EcuOutputs</code> (pulsos de injeção, avanço)</td></tr>
+    <tr><td><code>ecu/include/ecu/signals.h</code></td><td><code>EcuSignals</code>: variáveis internas da ECU, compartilhadas pelas funções</td></tr>
+    <tr><td><code>ecu/include/ecu/functions.h</code></td><td>As funções e seus handles de calibração</td></tr>
+    <tr><td><code>ecu/src/functions/</code></td><td>Um arquivo por função: a lógica de controle</td></tr>
+    <tr><td><code>ecu/include/ecu/calibration.h</code></td><td>Memória de calibração, <code>Value</code> / <code>Curve</code> / <code>Map</code>, interpolação</td></tr>
+    <tr><td><code>ecu/include/ecu/dcm_file.h</code></td><td>Leitor / gravador ASAM DCM 2.0</td></tr>
+    <tr><td><code>ecu/src/ecu.cpp</code></td><td>Lista de funções (ordem de execução), tarefas, estágio de saída da injeção</td></tr>
+    <tr><td><code>test/ecu_tests.cpp</code></td><td>Testes da ECU (Google Test, alvo <code>engine-sim-test</code>)</td></tr>
+  </table>
+
+  <h2>Adicionar uma correção a uma função existente</h2>
+  <p>Exemplo: fator de combustível em função da posição da borboleta.</p>
+  <ol>
+    <li><code>functions.h</code>: adicione um handle em <code>FuelControl</code>: <code>Curve m_tpsCorrection;</code></li>
+    <li><code>fuel_control.cpp</code>, <code>declare()</code>:
+<pre><code>m_tpsCorrection = cal.addCurve("FuelTpsCorr",
+    "Fuel factor vs throttle position",
+    "-", 0, 5, { "%", 0, 100, { 0, 25, 50, 75, 100 } }, { 1.0f });
+meas.add("fuel_corr_tps", "-", "Throttle position factor", &amp;s.fuelCorrTps);</code></pre></li>
+    <li><code>signals.h</code>: adicione <code>double fuelCorrTps = 1;</code> na parte de FuelControl.</li>
+    <li><code>fuel_control.cpp</code>, <code>run()</code>: calcule
+        <code>s.fuelCorrTps = m_tpsCorrection.lookup(cal, s.tps_percent);</code> e multiplique no tempo aberto.</li>
+    <li>Recompile. A nova <code>KENNLINIE FuelTpsCorr</code> aparece nos DCM aprendidos / padrão, pode ser adicionada ao
+        <code>calibration.dcm</code> à mão e recarrega ao vivo; a nova medição aparece no datalog <code>ENGINE_SIM_ECU_LOG</code>.</li>
+  </ol>
+
+  <h2>Adicionar uma função</h2>
+  <ol>
+    <li>Declare uma classe derivada de <code>EcuFunction</code> em <code>functions.h</code> (nome e tarefa no construtor,
+        handles de calibração como membros).</li>
+    <li>Implemente <code>declare()</code> (parâmetros com padrão e limites, medições), opcionalmente <code>reset()</code>,
+        e <code>run()</code> num arquivo novo em <code>ecu/src/functions/</code>.</li>
+    <li>Adicione os sinais dela em <code>EcuSignals</code>.</li>
+    <li>Registre-a em <code>Ecu::Ecu()</code> em <code>ecu/src/ecu.cpp</code>; a ordem da lista é a ordem de execução dentro de cada tarefa.</li>
+    <li>Adicione o <code>.cpp</code> em <code>ecu/CMakeLists.txt</code>.</li>
+  </ol>
+  <p>Use o modelo <code>ECU/_Modelo_Funcao.html</code> desta ajuda para documentar a função nova.</p>
+
+  <h2>Sensor ou atuador novo</h2>
+  <ul>
+    <li>Atuador: um campo em <code>EcuOutputs</code> e o modelo do atuador em <code>EcuHardware</code>.</li>
+    <li>Sensor: um campo em <code>EcuInputs</code> e o modelo do sensor em <code>EcuHardware</code>.</li>
+  </ul>
+
+  <h2>Regras da calibração</h2>
+  <ul>
+    <li>Os offsets dos parâmetros na memória de calibração seguem a ordem de declaração. Essa lista é tudo que um A2L
+        para XCP precisa (ver <a href="../Comunicacao/XCP_VISION.html">XCP com ATI VISION</a>).</li>
+    <li>Parâmetros novos devem ter padrão neutro (fator 1,0, correção 0°, função desligada), para DCMs antigos continuarem
+        se comportando como antes.</li>
+  </ul>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

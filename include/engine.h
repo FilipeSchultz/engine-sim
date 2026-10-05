@@ -44,6 +44,10 @@ class Engine : public Part {
             double initialHighFrequencyGain;
             double initialNoise;
             double initialJitter;
+
+            // Port injectors, driven by the ECU
+            double injectorFlow_ccmin = 440.0;
+            double injectorDeadTime_ms = 1.0;
         };
 
     public:
@@ -112,6 +116,10 @@ class Engine : public Part {
         double getInitialNoise() const { return m_initialNoise; }
         double getInitialJitter() const { return m_initialJitter; }
 
+        // Port injectors: static flow [cc/min] and dead time [ms]
+        double getInjectorFlow_ccmin() const { return m_injectorFlow_ccmin; }
+        double getInjectorDeadTime_ms() const { return m_injectorDeadTime_ms; }
+
         virtual Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission);
 
     protected:
@@ -140,6 +148,9 @@ class Engine : public Part {
         double m_initialHighFrequencyGain;
         double m_initialNoise;
         double m_initialJitter;
+
+        double m_injectorFlow_ccmin = 440.0;
+        double m_injectorDeadTime_ms = 1.0;
 
         ExhaustSystem *m_exhaustSystems;
         int m_exhaustSystemCount;

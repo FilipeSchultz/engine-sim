@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Marca Engine Rig Simulator: conta-giros com faixa vermelha em âmbar -->
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#22386B"/>
+  <path d="M14 44 A20 20 0 1 1 50 44" fill="none" stroke="#C9D1E3" stroke-width="4" stroke-linecap="round"/>
+  <path d="M47.3 23.1 A20 20 0 0 1 50 44" fill="none" stroke="#F2A33A" stroke-width="4" stroke-linecap="round"/>
+  <line x1="32" y1="36" x2="44" y2="22" stroke="#F2A33A" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32" cy="36" r="5" fill="#fff"/>
+</svg>

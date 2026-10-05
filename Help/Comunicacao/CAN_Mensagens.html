@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Mensagens e sinais CAN</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Mensagens e sinais CAN</h1>
+  <p class="subtitulo">Mensagens do protocolo AVL EMCON como implementadas no simulador</p>
+
+  <p>Todos os sinais são little-endian. Rotações, torques e porcentagens são <b>float IEEE 754</b> de 32 bits.
+     Identificadores de 11 bits; quadros estendidos são ignorados. A coluna <b>RCS</b> mostra o parâmetro ligado ao sinal em
+     <code>CanConfigRCS.canconfig</code>.</p>
+
+  <h2>Do simulador para o HOST (BME → HOST)</h2>
+
+  <h3>BME_Control — 0x200 (512), 5 bytes, a cada 100 ms</h3>
+  <table>
+    <tr><th>Byte</th><th>Sinal</th><th>Valores</th><th>RCS</th></tr>
+    <tr><td>0</td><td><code>System_State</code></td><td>0 = notManual, 1 = Manual, 2 = Remote</td><td>—</td></tr>
+    <tr><td>1</td><td><code>Control_Mode_State</code></td><td>0 = Speed, 1 = Torque</td><td><code>Mode_DynoCtrl</code></td></tr>
+    <tr><td>2</td><td><code>System_Error</code></td><td>0 = Trouble, 1 = NoTrouble</td><td>—</td></tr>
+    <tr><td>3</td><td><code>Dyno_OnOff_State</code></td><td>0 = DynoOFF, 1 = DynoON, 2 = Transition</td><td><code>I_DynoOn</code></td></tr>
+    <tr><td>4</td><td><code>Torque_Mode_State</code></td><td>0 = Te (normal), 1 = Td (torque no eixo). Eco do comando</td><td>—</td></tr>
+  </table>
+
+  <h3>BME_Actual_1 — 0x211 (529), 8 bytes, a cada 20 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Unidade</th><th>Conteúdo</th><th>RCS</th></tr>
+    <tr><td>0–3</td><td><code>Dyno_Speed</code></td><td>rpm</td><td>Rotação do motor (dinamômetro acoplado ao virabrequim)</td><td><code>Spd_Engine</code></td></tr>
+    <tr><td>4–7</td><td><code>Throttle_Set</code></td><td>%</td><td>Posição do acelerador aplicada</td><td>—</td></tr>
+  </table>
+
+  <h3>BME_Actual_2 — 0x212 (530), 6 bytes, a cada 20 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Unidade</th><th>Conteúdo</th><th>RCS</th></tr>
+    <tr><td>0–3</td><td><code>Dyno_Torque</code></td><td>Nm</td><td>Torque de frenagem medido (com ruído e filtro da célula de carga; 0 + ruído com o dinamômetro desligado)</td><td><code>Trq_Engine</code></td></tr>
+    <tr><td>4–5</td><td><code>Lifesignal</code></td><td>—</td><td>uint16, +1 por transmissão, 0 a 10000</td><td><code>Dyno_Lifesignal</code></td></tr>
+  </table>
+
+  <h2>Do HOST para o simulador (HOST → BME)</h2>
+
+  <h3>HOST_Control — 0x100 (256), 7 bytes</h3>
+  <table>
+    <tr><th>Byte / bit</th><th>Sinal</th><th>Valores</th><th>RCS</th></tr>
+    <tr><td>0</td><td><code>Remote_Command</code></td><td>0 = Manual, 1 = Remote</td><td><code>O_RemoteDyno</code></td></tr>
+    <tr><td>1</td><td><code>Control_Mode_Command</code></td><td>0 = Speed, 1 = Torque</td><td><code>C_Mode_DynoCtrl</code></td></tr>
+    <tr><td>2</td><td><code>Dyno_On_Off</code></td><td>0 = Dyno_OFF, 1 = Dyno_ON</td><td><code>O_DynoOn</code></td></tr>
+    <tr><td>3</td><td><code>Reset_Key</code></td><td>0 = released, 1 = pushed (borda de subida apaga a falha)</td><td>—</td></tr>
+    <tr><td>4</td><td><code>Remote_Takeover</code></td><td>0 = Manual, 1 = Remote (lido, sem efeito no simulador)</td><td>—</td></tr>
+    <tr><td>5, bit 0</td><td><code>Ignition_Key</code></td><td>0 = Off, 1 = On (<b>extensão do engine-sim</b>)</td><td><code>O_IgnitionKey</code></td></tr>
+    <tr><td>5, bit 1</td><td><code>Starter</code></td><td>0 = Off, 1 = Cranking (<b>extensão do engine-sim</b>)</td><td><code>O_Starter</code></td></tr>
+    <tr><td>6</td><td><code>Torque_Mode_Command</code></td><td>0 = Te, 1 = Td</td><td>—</td></tr>
+  </table>
+
+  <h3>HOST_Demand_1 — 0x110 (272), 8 bytes</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Unidade</th><th>Uso</th><th>RCS</th></tr>
+    <tr><td>0–3</td><td><code>Speed_Demand</code></td><td>rpm</td><td>Rotação pedida no modo Speed (valor absoluto, limitado a 1,2 × redline)</td><td><code>S_Spd_Dyno</code></td></tr>
+    <tr><td>4–7</td><td><code>Torque_Demand</code></td><td>Nm</td><td>Torque de frenagem no modo Torque</td><td><code>S_Trq_Dyno</code></td></tr>
+  </table>
+
+  <h3>HOST_Demand_2 — 0x111 (273), 6 bytes</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Unidade</th><th>Uso</th><th>RCS</th></tr>
+    <tr><td>0–3</td><td><code>Alpha_demand</code></td><td>%</td><td>Acelerador (0 a 100)</td><td><code>S_Pos_Throttle</code></td></tr>
+    <tr><td>4–5</td><td><code>LifesignalFeedback</code></td><td>—</td><td>uint16; precisa mudar continuamente em remoto se o timeout estiver ligado</td><td><i>não mapeado</i></td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção:</b> mensagens HOST mais curtas que o tamanho indicado são ignoradas. Os valores recebidos ficam valendo até
+    chegar uma mensagem nova: se o HOST parar de transmitir sem lifesignal, a última demanda continua aplicada.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Comunicação &middot; Revisão 0.1</div>
+</body>
+</html>

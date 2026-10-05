@@ -39,10 +39,30 @@ drawings and a TDC sensor). They can also be typed in or saved/loaded as JSON
 | IMEP net / gross | ∮p dV over 720° / over ±180°, divided by the displacement |
 | Heat release, MFB | dQ = γ/(γ-1)·p·dV + 1/(γ-1)·V·dp, normalised from its minimum to its maximum |
 | CA10 / CA50 / CA90 | angles of 10/50/90 % mass fraction burned |
-| COV IMEP | standard deviation / mean of the net IMEP over the averaged cycles |
+| COV IMEP, COV Pmax | standard deviation / mean over the averaged cycles |
+| σ CA50 | standard deviation of CA50 over the averaged cycles |
 
 Angles are degrees after the firing TDC (negative = before). The table shows the
 mean of the last N cycles (setting "Ciclos na média").
+
+## Display
+
+As on a real indicating system, the curves show the **mean cycle** by default:
+the ensemble average of the last N pressure traces (on a common 0.25° grid),
+with its own heat release and MFB. Setting "Exibição":
+
+| Mode | Shows |
+|---|---|
+| Ciclo médio | mean cycle only |
+| Ciclo médio + envelope mín/máx | mean cycle and the min / max band of the N cycles (default) |
+| Ciclo médio + ciclos sobrepostos | mean cycle and the last 20 single cycles in thin lines |
+| Último ciclo | the latest single cycle (jumps from cycle to cycle) |
+
+Note that the CA50 of the mean cycle is not the mean of the cycles' CA50 shown
+in the table (averaging the pressure smooths the combustion).
+
+The "Ciclo a ciclo" tab plots Pmax, net IMEP and CA50 of each of the last N
+cycles: drifts, misfires and slow-burn cycles stand out there.
 
 The geometry matters as on a real bench: 1° of TDC error changes the IMEP by
 a few %, a wrong compression ratio distorts the heat release.

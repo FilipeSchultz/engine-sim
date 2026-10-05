@@ -18,6 +18,7 @@ namespace es_script {
             Transmission *transmission = nullptr;
             Simulator::Parameters simulatorParameters;
             ApplicationSettings applicationSettings;
+            EcuScriptSettings ecuSettings;
 
             std::vector<Function *> functions;
         };

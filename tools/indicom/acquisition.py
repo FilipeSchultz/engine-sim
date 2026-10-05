@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from analysis import Geometry, Settings, analyze_cycle
+from analysis import Geometry, Settings, analyze_cycle, resample
 
 HEADER = struct.Struct("<4sBBHIHH")
 MAGIC = b"ESIN"
@@ -231,7 +231,7 @@ class Acquisition(threading.Thread):
                 if hi - lo > 50 and theta[0] < -355.0 and theta[-1] > 355.0 and np.max(np.diff(theta)) < 10.0:
                     try:
                         result, curves = analyze_cycle(i + 1, theta, self._pressure[lo:hi, i], geometry, settings)
-                        self.results.put_nowait((result, curves))
+                        self.results.put_nowait((result, resample(curves)))
                     except (queue.Full, ValueError, FloatingPointError):
                         pass
                 center += 720.0

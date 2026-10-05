@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Sensores e atuadores</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Sensores e atuadores</h1>
+  <p class="subtitulo">O que a ECU enxerga do motor e como os comandos dela chegam à simulação</p>
+
+  <table class="ficha">
+    <tr><td>Classe</td><td><code>EcuHardware</code></td></tr>
+    <tr><td>Arquivo</td><td><code>include/ecu_hardware.h</code>, <code>src/ecu_hardware.cpp</code></td></tr>
+    <tr><td>Interface</td><td><code>ecu/include/ecu/io.h</code>: <code>EcuConfig</code>, <code>EcuInputs</code>, <code>EcuOutputs</code></td></tr>
+  </table>
+
+  <p>O <code>EcuHardware</code> é o "ambiente elétrico" da ECU na simulação, como numa bancada HIL. É o único código que
+     conhece o motor e a ECU ao mesmo tempo. Roda uma vez por passo da física, antes da ignição e do escoamento de gás.
+     Na troca de motor, configura a ECU com o número de cilindros e o ângulo do PMS de combustão de cada um.</p>
+
+  <h2>Sensores</h2>
+  <table>
+    <tr><th>Sensor</th><th>Modelo</th></tr>
+    <tr><td>Virabrequim / comando</td><td>Ângulo do ciclo 0 a 720°, rotação instantânea</td></tr>
+    <tr><td>MAP</td><td>Pressão do plenum, instantânea (a ECU calcula a média por intervalo de ignição)</td></tr>
+    <tr><td>IAT</td><td>Temperatura do gás no plenum, primeira ordem com 2 s</td></tr>
+    <tr><td>CLT</td><td>Constante 90 °C (ainda sem modelo térmico)</td></tr>
+    <tr><td>TPS</td><td>Abertura da borboleta</td></tr>
+    <tr><td>λ (wideband)</td><td>λ da última combustão, primeira ordem com 0,1 s; 0 até a primeira combustão</td></tr>
+  </table>
+
+  <h2>Atuadores</h2>
+  <table>
+    <tr><th>Atuador</th><th>Modelo</th></tr>
+    <tr><td>Injetores (no pórtico)</td>
+        <td>Os injetores do motor (<code>injector_flow</code> [cc/min] e <code>injector_dead_time</code> [ms] no nó
+            <code>engine</code> do script): um pulso entrega <code>vazão × (pulso − tempo morto)</code> de combustível no
+            pórtico, onde ele espera a válvula de admissão abrir. <code>InjectorFlow</code> e <code>InjectorDeadTime</code>
+            da calibração devem descrever os mesmos injetores</td></tr>
+    <tr><td>Ignição</td><td>Avanço pedido pela ECU, aplicado no lugar da curva do script quando <code>EcuIgnEnable</code> = 1</td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção:</b> com <code>EcuFuelEnable</code> = 1 o coletor de admissão só tem ar. O instrumento LAMBDA da tela usa o λ
+    do cilindro por isso; o AFR do coletor (<code>intake_afr</code> no datalog) não representa a mistura queimada.
+  </div>
+
+  <div class="pendente">Complete: modelo de bateria (<code>battery_V</code> existe na interface) e planos para modelo térmico do CLT.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

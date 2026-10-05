@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Motor CFR</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Motor CFR</h1>
+  <p class="subtitulo">Waukesha CFR F1/F2: motor de pesquisa usado como exemplo de calibração</p>
+
+  <table class="ficha">
+    <tr><td>Script</td><td><code>assets/engines/cfr/cfr_f1.mr</code></td></tr>
+    <tr><td>Dataset da ECU</td><td><code>assets/calibration/datasets/cfr.dcm</code></td></tr>
+    <tr><td>Frequência da simulação</td><td>40 kHz</td></tr>
+  </table>
+
+  <p>Monocilíndrico de taxa de compressão variável usado para determinar a octanagem (ASTM D2699 / D2700).
+     Opere como o real: segure a rotação com o dinamômetro (modo de rotação) e varie carga, avanço, mistura e taxa.</p>
+
+  <h2>Dados publicados usados</h2>
+  <table>
+    <tr><th>Item</th><th>Valor</th></tr>
+    <tr><td>Diâmetro × curso</td><td>3,25 in (82,55 mm) × 4,50 in (114,3 mm), 611,7 cm³</td></tr>
+    <tr><td>Biela</td><td>10,0 in (254 mm)</td></tr>
+    <tr><td>Taxa de compressão</td><td>Variável, 4:1 a 18:1 (cilindro sobe e desce)</td></tr>
+    <tr><td>Admissão</td><td>Abre 10° depois do PMS, fecha 34° depois do PMI</td></tr>
+    <tr><td>Escape</td><td>Abre 40° antes do PMI, fecha 15° depois do PMS</td></tr>
+    <tr><td>Rotação</td><td>600 rpm (RON) / 900 rpm (MON), mantida por motor síncrono</td></tr>
+    <tr><td>Avanço RON</td><td>13° antes do PMS, fixo</td></tr>
+  </table>
+  <p>Aproximações (sem dados publicados à mão): levantamento de válvulas e vazão dos pórticos, massas e inércias,
+     volumes de admissão e escape.</p>
+
+  <h2>Resultado da calibração: 600 rpm, plena carga, taxa 8, avanço 13°, λ 0,91</h2>
+  <table>
+    <tr><th></th><th>Original</th><th>Chama 2, γ = 1,4</th><th>Chama 2 + gás 1</th></tr>
+    <tr><td>Transferência de calor</td><td>100 W/m²K</td><td>Hohenberg × 2,5, 90 °C</td><td>Hohenberg × 1,0, 150 °C</td></tr>
+    <tr><td>Carga fresca / VE</td><td>695 mg / 96 % (ar 25 °C)</td><td>660 mg / 99 % (ar 52 °C)</td><td>710 mg / 107 % (ar 52 °C)</td></tr>
+    <tr><td>Eficiência indicada bruta</td><td>48,7 %</td><td>32,9 %</td><td>34,5 %</td></tr>
+    <tr><td>IMEP líquido</td><td>17,6 bar</td><td>10,1 bar</td><td>11,5 bar</td></tr>
+    <tr><td>COV do IMEP</td><td>—</td><td>1 a 4 %</td><td>2 a 3 %</td></tr>
+    <tr><td>Pmax (média)</td><td>66 bar</td><td>44 bar</td><td>41 bar</td></tr>
+    <tr><td>CA10 / CA50 / CA90</td><td>— / 17 / — °</td><td>1,6 / 16,1 / 29,3 °</td><td>1,8 / 16,3 / 29,2 °</td></tr>
+    <tr><td>Expoente politrópico de compressão (−100 → −40°)</td><td>—</td><td>1,37</td><td>1,33</td></tr>
+    <tr><td>Liberação aparente de calor após a combustão</td><td>—</td><td>≈ −9 J/°</td><td>≈ −0,3 J/°</td></tr>
+    <tr><td>Pico da temperatura média do gás</td><td>—</td><td>—</td><td>≈ 2200 K</td></tr>
+  </table>
+
+  <h3>Varredura de avanço (gás 1, λ 0,91)</h3>
+  <table>
+    <tr><th>Avanço [° antes do PMS]</th><td>3</td><td>8</td><td>13</td><td>18</td><td><b>23</b></td><td>28</td><td>35</td></tr>
+    <tr><th>CA50 [° depois do PMS]</th><td>26,1</td><td>21,1</td><td>16,3</td><td>11,7</td><td><b>7,2</b></td><td>2,7</td><td>−3,1</td></tr>
+    <tr><th>IMEP líquido [bar]</th><td>10,71</td><td>11,15</td><td>11,46</td><td>11,65</td><td><b>11,71</b></td><td>11,64</td><td>11,37</td></tr>
+    <tr><th>COV do IMEP [%]</th><td>4,5</td><td>3,7</td><td>2,9</td><td>2,1</td><td><b>1,2</b></td><td>0,8</td><td>1,7</td></tr>
+  </table>
+  <p>O MBT fica em ~23° antes do PMS, com CA50 ≈ 7°. A curva de torque é plana em volta (±5° custam &lt; 1 %) e
+     20° de atraso custam ~9 %. O COV cai em direção ao MBT.</p>
+
+  <h3>Varredura de mistura (gás 1, avanço 13°)</h3>
+  <table>
+    <tr><th>λ</th><td>0,70</td><td>0,80</td><td><b>0,85</b></td><td>0,91</td><td>1,01</td><td>1,12</td></tr>
+    <tr><th>IMEP líquido [bar]</th><td>11,10</td><td>11,41</td><td><b>11,48</b></td><td>11,46</td><td>11,12</td><td>10,41</td></tr>
+  </table>
+  <p>Pico em λ ≈ 0,85 a 0,9, −3 % em λ = 1 e −9 % em λ 1,12, como num motor real. Com o modelo de gás original,
+     o torque era plano para todo λ &lt; 1 (combustão limitada só pelo O<sub>2</sub>).</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> a VE (107 %) e portanto o IMEP estão no limite alto do esperado para um CFR (IMEP ~9 a 11 bar):
+    não havia vazão de ar medida para calibrar a admissão.
+  </div>
+  <div class="pendente">Inclua a vazão de ar medida num CFR real (se disponível) e refaça o passo 1 da calibração.</div>
+
+  <h2>Referências</h2>
+  <ul>
+    <li>Bestel et al., OSTI 1597460 (Pmax ~45 bar com CA50 16°, taxa 7,41).</li>
+    <li>Waqas et al., OSTI 1606342 (liberação de calor a 600 rpm, PRF90).</li>
+  </ul>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Scripts de motor &middot; Revisão 0.1</div>
+</body>
+</html>

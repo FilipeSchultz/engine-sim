@@ -144,6 +144,7 @@ void es_script::LanguageRules::registerBuiltinNodeTypes() {
     registerBuiltinType<k_CarbNode>("__engine_sim__k_carb");
     registerBuiltinType<GenerateHarmonicCamLobeNode>("__engine_sim__generate_harmonic_cam_lobe");
     registerBuiltinType<SetApplicationSettingsNode>("__engine_sim__set_application_settings");
+    registerBuiltinType<SetEcuSettingsNode>("__engine_sim__set_ecu_settings");
     registerBuiltinType<SetVehicleNode>("__engine_sim__set_vehicle");
     registerBuiltinType<SetTransmissionNode>("__engine_sim__set_transmission");
     registerBuiltinType<AddGearNode>("__engine_sim__add_gear");

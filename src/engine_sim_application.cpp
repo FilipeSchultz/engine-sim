@@ -14,11 +14,13 @@
 #include "../include/feedback_comb_filter.h"
 #include "../include/utilities.h"
 #include "../include/avl_emcon.h"
-#include "../include/ecu/dcm_file.h"
+#include "ecu/dcm_file.h"
 
 #include "../scripting/include/compiler.h"
 
 #include <chrono>
+#include <cstdio>
+#include <ctime>
 #include <stdlib.h>
 #include <sstream>
 #include <fstream>
@@ -30,7 +32,7 @@
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
-EngineSimApplication::EngineSimApplication() {
+EngineSimApplication::EngineSimApplication() : m_ecuHost(m_ecu) {
     m_assetPath = "";
 
     m_geometryVertexBuffer = nullptr;
@@ -187,6 +189,7 @@ void EngineSimApplication::initialize() {
 
     initializeEcu();
     initializeIndicating();
+    initializeAutostart();
     openCan();
     m_audioSource->SetPan(0.0f);
     m_audioSource->SetVolume(1.0f);
@@ -439,11 +442,13 @@ void EngineSimApplication::run() {
 
 void EngineSimApplication::destroy() {
     m_can.close();
+    m_ecu.stopXcp();
 
-    if (m_ecu.isLearning()) {
+    if (!m_ecuLearnPath.empty()) {
         saveLearnedCalibration();
     }
-    m_ecuLog.close();
+    m_ecuHost.closeLog();
+    m_ecuLinkLog.close();
     m_indicatingLog.close();
     m_indicatingUdp.close();
 
@@ -492,7 +497,8 @@ void EngineSimApplication::loadEngine(
 
     m_simulator = engine->createSimulator(vehicle, transmission);
     if (m_simulator != nullptr) {
-        m_simulator->setEcu(&m_ecu);
+        m_simulator->setEcuHardware(&m_ecuHardware);
+        m_ecuHardware.attach(engine);
         attachIndicating();
     }
 
@@ -656,6 +662,7 @@ void EngineSimApplication::loadScript() {
     if (compiled) {
         const es_script::Compiler::Output output = compiler.execute();
         configure(output.applicationSettings);
+        onEcuSettings(output.ecuSettings);
 
         engine = output.engine;
         vehicle = output.vehicle;
@@ -745,96 +752,206 @@ namespace {
     }
 }
 
-void EngineSimApplication::initializeEcu() {
-    m_calibrationPath = m_assetPath + "/calibration/calibration.dcm";
-
-    // First run: write the default (disabled) calibration so there is a file to edit
-    std::error_code ec;
-    if (!std::filesystem::exists(m_calibrationPath, ec)) {
-        std::filesystem::create_directories(std::filesystem::path(m_calibrationPath).parent_path(), ec);
-
-        std::string error;
-        ecu::writeDcm(
-            m_calibrationPath,
-            ecu::defaultCalibration(),
-            "Default calibration: ECU functions disabled (engine script behaviour)",
-            &error);
+void EngineSimApplication::initializeAutostart() {
+    // Unattended start, for scripted runs: ENGINE_SIM_AUTOSTART=<s> turns
+    // the ignition on and runs the starter for <s> seconds;
+    // ENGINE_SIM_DYNO_HOLD=<rpm> holds the speed with the dyno (a research
+    // engine such as the CFR is motored up to speed, not started);
+    // ENGINE_SIM_THROTTLE=<0..1> is the throttle with no key pressed
+    const std::string autostart = getEnvironmentString("ENGINE_SIM_AUTOSTART");
+    if (!autostart.empty()) {
+        m_autostartTimer = std::atof(autostart.c_str());
+        m_autostartIgnition = true;
     }
 
-    reloadCalibration();
-
-    m_ecuLearnPath = getEnvironmentString("ENGINE_SIM_ECU_LEARN");
-    if (!m_ecuLearnPath.empty()) {
-        m_ecu.setLearning(true);
-        m_ecuLearnSaveTimer = 10.0;
+    const std::string throttle = getEnvironmentString("ENGINE_SIM_THROTTLE");
+    if (!throttle.empty()) {
+        m_restingThrottle = clamp(std::atof(throttle.c_str()));
     }
 
-    const std::string logPath = getEnvironmentString("ENGINE_SIM_ECU_LOG");
-    if (!logPath.empty()) {
-        m_ecuLog.open(logPath, std::ios::out);
-        m_ecuLog << "time_s,rpm,map_kPa,injection_ms,advance_deg,intake_afr,cylinder_lambda,throttle_percent,"
-            "dyno_torque_Nm,fuel_ecu,ignition_ecu\n";
+    const std::string dynoHold = getEnvironmentString("ENGINE_SIM_DYNO_HOLD");
+    if (!dynoHold.empty()) {
+        m_autostartDynoSpeed = units::rpm(std::atof(dynoHold.c_str()));
     }
 }
 
-void EngineSimApplication::reloadCalibration() {
-    std::error_code ec;
-    m_calibrationFileTime = std::filesystem::last_write_time(m_calibrationPath, ec);
+void EngineSimApplication::initializeEcu() {
+    m_ecuHost.setMessageHandler([this](const std::string &text) {
+        if (m_infoCluster != nullptr) m_infoCluster->setLogMessage(text);
+    });
 
-    ecu::CalibrationPage page = m_ecu.calibration().getWorkingPage();
-    std::vector<std::string> warnings;
-    std::string error;
-    if (!ecu::readDcm(m_calibrationPath, &page, &warnings, &error)) {
-        // Keep running with the previous calibration
-        m_infoCluster->setLogMessage("ECU: " + error);
+    m_ecuHardware.setEcu(&m_ecu);
+
+    // External ECU: calibration, XCP and datalog are ecu-standalone's
+    if (initializeEcuLink()) return;
+
+    m_ecuHost.openCalibration(m_assetPath + "/calibration/calibration.dcm");
+    initializeXcp();
+
+    m_ecuLearnPath = getEnvironmentString("ENGINE_SIM_ECU_LEARN");
+    if (!m_ecuLearnPath.empty()) {
+        m_ecuHardware.setLearner(&m_ecuLearner);
+        m_ecuLearnSaveTimer = 10.0;
+    }
+
+    // Datalog: every ECU measurement, then plant values the ECU can't see
+    const std::string logPath = getEnvironmentString("ENGINE_SIM_ECU_LOG");
+    if (!logPath.empty()) {
+        m_ecuHost.openLog(logPath,
+            { "intake_afr", "cylinder_lambda", "throttle_percent", "dyno_torque_Nm" });
+    }
+}
+
+void EngineSimApplication::onEcuSettings(const EcuScriptSettings &settings) {
+    // Applied at start-up (initializeXcp); the XCP server can't be restarted
+    // in the same process, so a change on script reload needs a restart
+    if (!m_ecuSettingsLoaded) {
+        m_ecuScriptSettings = settings;
+        m_ecuSettingsLoaded = true;
         return;
     }
 
-    m_ecu.calibration().setWorkingPage(page);
+    const bool before = m_ecuScriptSettings.xcp;
+    m_ecuScriptSettings = settings;
+    if (settings.xcp != before && getEnvironmentString("ENGINE_SIM_XCP").empty()) {
+        m_infoCluster->setLogMessage(
+            "XCP: set_ecu_settings changed, restart the simulator to apply it");
+    }
+}
 
-    std::string message = "ECU: calibration loaded (fuel ";
-    message += (page.EcuFuelEnable >= 0.5f) ? "ON" : "OFF";
-    message += ", ignition ";
-    message += (page.EcuIgnEnable >= 0.5f) ? "ON" : "OFF";
-    message += ")";
-    if (!warnings.empty()) {
-        message += " - " + warnings.front();
+bool EngineSimApplication::initializeEcuLink() {
+    // set_ecu_settings(link: true, ...) in the script; the environment
+    // overrides it: ENGINE_SIM_ECU_LINK=1 / 0, ENGINE_SIM_ECU_LINK_ADDRESS
+    // (address[:port]), ENGINE_SIM_ECU_LINK_SYNC (lockstep / free)
+    const EcuScriptSettings &script = m_ecuScriptSettings;
+    const std::string enabled = getEnvironmentString("ENGINE_SIM_ECU_LINK");
+    if (enabled.empty() ? !script.link : enabled != "1") return false;
+
+    EcuHardware::LinkSettings settings;
+    settings.address = script.linkAddress;
+    settings.port = (uint16_t)script.linkPort;
+
+    const std::string endpoint = getEnvironmentString("ENGINE_SIM_ECU_LINK_ADDRESS");
+    if (!endpoint.empty() && !ecu::link::parseEndpoint(endpoint, &settings.address, &settings.port)) {
+        m_infoCluster->setLogMessage("ECU link: invalid address " + endpoint);
+        return false;
     }
 
-    m_infoCluster->setLogMessage(message);
+    std::string sync = getEnvironmentString("ENGINE_SIM_ECU_LINK_SYNC");
+    if (sync.empty()) sync = script.linkSync;
+    settings.lockstep = sync != "free";
+
+    std::string error;
+    if (!m_ecuHardware.openLink(settings, &error)) {
+        m_infoCluster->setLogMessage("ECU link: " + error);
+        return false;
+    }
+
+    m_infoCluster->setLogMessage("ECU link: waiting for ecu-standalone on "
+        + settings.address + ":" + std::to_string(settings.port)
+        + (settings.lockstep ? " (lockstep)" : " (free)"));
+
+    // Datalog of the I/O controller side: what it sends, what it applies,
+    // and plant values the ECU can't see (ecu-standalone logs the ECU)
+    const std::string logPath = getEnvironmentString("ENGINE_SIM_ECU_LOG");
+    if (!logPath.empty()) {
+        m_ecuLinkLog.open(logPath, std::ios::out);
+        m_ecuLinkLog << "time_s,link_state,rpm,map_kPa,lambda_sensor,fuel_ecu,injection_ms,"
+            "injection_angle_deg,ignition_ecu,advance_deg,intake_afr,cylinder_lambda,"
+            "throttle_percent,dyno_torque_Nm\n";
+        m_ecuLinkLogTime = m_ecuLinkLogTimer = 0;
+    }
+    return true;
+}
+
+void EngineSimApplication::initializeXcp() {
+    // XCP on Ethernet for calibration tools (ATI VISION, CANape...), set in
+    // the script with set_ecu_settings(xcp: true, ...). The environment
+    // overrides it: ENGINE_SIM_XCP=1 / 0, ENGINE_SIM_XCP_ADDRESS (0.0.0.0 =
+    // every interface, 127.0.0.1 = this computer only), ENGINE_SIM_XCP_PORT,
+    // ENGINE_SIM_XCP_CLOCK (sim / real), ENGINE_SIM_XCP_LOG (0..4)
+    const EcuScriptSettings &script = m_ecuScriptSettings;
+    const std::string enabled = getEnvironmentString("ENGINE_SIM_XCP");
+    if (enabled.empty() ? !script.xcp : enabled != "1") return;
+
+    ecu::XcpSettings settings;
+    settings.port = (uint16_t)script.xcpPort;
+    settings.simulatedClock = script.xcpClock != "real";
+
+    std::string address = getEnvironmentString("ENGINE_SIM_XCP_ADDRESS");
+    if (address.empty()) address = script.xcpAddress;
+    if (!address.empty() && !ecu::parseIpv4(address, settings.address)) {
+        m_infoCluster->setLogMessage("XCP: invalid address " + address);
+        return;
+    }
+
+    const std::string port = getEnvironmentString("ENGINE_SIM_XCP_PORT");
+    if (!port.empty()) settings.port = (uint16_t)std::atoi(port.c_str());
+
+    const std::string clock = getEnvironmentString("ENGINE_SIM_XCP_CLOCK");
+    if (!clock.empty()) settings.simulatedClock = clock != "real";
+
+    const std::string logLevel = getEnvironmentString("ENGINE_SIM_XCP_LOG");
+    if (!logLevel.empty()) settings.logLevel = std::atoi(logLevel.c_str());
+
+    m_ecuHost.startXcp(settings);
 }
 
 void EngineSimApplication::saveLearnedCalibration() {
     int fuelColumns = 0, ignitionColumns = 0;
-    const ecu::CalibrationPage page = m_ecu.buildLearnedPage(&fuelColumns, &ignitionColumns);
+    const ecu::CalibrationPage page = m_ecuLearner.buildPage(m_ecu, &fuelColumns, &ignitionColumns);
 
     std::string error;
     const std::string comment =
         "Learned from the engine script behaviour (steady-state points, linear fit\n"
         "against MAP per RPM column): "
         + std::to_string(fuelColumns) + " fuel and "
-        + std::to_string(ignitionColumns) + " ignition RPM columns learned";
-    if (!ecu::writeDcm(m_ecuLearnPath, page, comment, &error)) {
+        + std::to_string(ignitionColumns) + " ignition RPM columns learned\n"
+        "ECU software: " + m_ecu.epk();
+    if (!ecu::writeDcm(m_ecuLearnPath, m_ecu.layout(), page, comment, &error)) {
         m_infoCluster->setLogMessage("ECU: " + error);
     }
 }
 
 void EngineSimApplication::updateEcu(double dt) {
-    m_ecu.beginFrame();
-
-    // Reload the calibration file whenever it is saved
-    m_calibrationCheckTimer -= dt;
-    if (m_calibrationCheckTimer <= 0) {
-        m_calibrationCheckTimer = 0.5;
-
-        std::error_code ec;
-        const auto fileTime = std::filesystem::last_write_time(m_calibrationPath, ec);
-        if (!ec && fileTime != m_calibrationFileTime) {
-            reloadCalibration();
+    if (m_ecuHardware.linkOpen()) {
+        const EcuHardware::LinkState state = m_ecuHardware.linkState();
+        if (state != m_ecuLinkState) {
+            if (state == EcuHardware::LinkState::Connected) {
+                m_infoCluster->setLogMessage("ECU link: ecu-standalone connected");
+            }
+            else if (state == EcuHardware::LinkState::Lost) {
+                m_infoCluster->setLogMessage(
+                    "ECU link: no command for 0.1 s, ECU outputs cut (engine script mixture and timing)");
+            }
         }
+        m_ecuLinkState = state;
+
+        if (m_ecuLinkLog.is_open() && m_iceEngine != nullptr) {
+            m_ecuLinkLogTime += dt;
+            m_ecuLinkLogTimer -= dt;
+            if (m_ecuLinkLogTimer <= 0) {
+                m_ecuLinkLogTimer += 0.05;
+                if (m_ecuLinkLogTimer <= 0) m_ecuLinkLogTimer = 0.05;
+
+                const ecu::EcuInputs &in = m_ecuHardware.inputs();
+                const ecu::EcuOutputs &out = m_ecuHardware.outputs();
+                m_ecuLinkLog << m_ecuLinkLogTime << "," << (int)state
+                    << "," << in.rpm << "," << m_ecuHardware.averagedMap_kPa() << "," << in.lambda
+                    << "," << out.fuelControl << "," << out.injection_ms << "," << out.injectionAngle_deg
+                    << "," << out.sparkControl << "," << out.sparkAdvance_deg
+                    << "," << m_iceEngine->getIntakeAfr()
+                    << "," << m_iceEngine->getCylinderLambda()
+                    << "," << m_speedSetting * 100.0
+                    << "," << units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) << "\n";
+            }
+        }
+        return;
     }
 
-    if (m_ecu.isLearning()) {
+    m_ecuHost.update(dt);
+
+    if (!m_ecuLearnPath.empty()) {
         m_ecuLearnSaveTimer -= dt;
         if (m_ecuLearnSaveTimer <= 0) {
             m_ecuLearnSaveTimer = 10.0;
@@ -842,30 +959,12 @@ void EngineSimApplication::updateEcu(double dt) {
         }
     }
 
-    if (m_ecuLog.is_open() && m_iceEngine != nullptr) {
-        m_ecuLogTime += dt;
-        m_ecuLogTimer -= dt;
-        if (m_ecuLogTimer <= 0) {
-            m_ecuLogTimer = 0.05;
-
-            const ecu::Ecu::Measurements &m = m_ecu.getMeasurements();
-
-            m_ecuLog
-                << m_ecuLogTime << ","
-                << m.rpm << ","
-                << m.map_kPa << ","
-                << m.injectionTime_ms << ","
-                << m.advance_deg << ","
-                << m_iceEngine->getIntakeAfr() << ","
-                << m_iceEngine->getCylinderLambda() << ","
-                << m_speedSetting * 100.0 << ","
-                << units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) << ","
-                << (m.fuelActive ? 1 : 0) << ","
-                << (m.ignitionActive ? 1 : 0) << "\n";
-
-            // Keep the file usable even if the simulator is killed
-            if (++m_ecuLogLines % 20 == 0) m_ecuLog.flush();
-        }
+    if (m_iceEngine != nullptr && m_ecuHost.logDue(dt)) {
+        m_ecuHost.writeLogRow({
+            m_iceEngine->getIntakeAfr(),
+            m_iceEngine->getCylinderLambda(),
+            m_speedSetting * 100.0,
+            units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) });
     }
 }
 
@@ -878,7 +977,10 @@ void EngineSimApplication::initializeIndicating() {
             m_indicatingLog
                 << "time_s,cycle,cylinder,rpm,map_kPa,spark_btdc_deg,pmax_bar,pmax_atdc_deg,"
                 << "imep_gross_bar,imep_net_bar,ca10_atdc_deg,ca50_atdc_deg,ca90_atdc_deg,"
-                << "burn_10_90_deg,ca50_reference_atdc_deg,misfire\n";
+                << "burn_10_90_deg,ca50_reference_atdc_deg,misfire,"
+                << "fresh_charge_mg,trapped_mass_mg,residual_percent,ve_percent,"
+                << "fuel_burned_mg,indicated_eff_gross_percent,"
+                << "egt_flow_weighted_C,egt_port_mean_C\n";
         }
         else {
             m_infoCluster->setLogMessage("INDI: cannot write " + path);
@@ -939,7 +1041,8 @@ void EngineSimApplication::updateIndicating(double dt) {
 
     if (!m_indicatingLog.is_open()) return;
 
-    const double map_kPa = units::convert(m_iceEngine->getManifoldPressure(), units::kPa);
+    // As the ECU sees it: averaged over the last firing interval
+    const double map_kPa = m_ecuHardware.averagedMap_kPa();
 
     IndicatingSystem::CycleResult r;
     while (m_indicating.popResult(&r)) {
@@ -960,7 +1063,11 @@ void EngineSimApplication::updateIndicating(double dt) {
             m_indicatingLog << ",,,,";
         }
 
-        m_indicatingLog << "," << (r.misfire ? 1 : 0) << "\n";
+        m_indicatingLog << "," << (r.misfire ? 1 : 0) << ","
+            << r.freshCharge_mg << "," << r.trappedMass_mg << ","
+            << r.residual_percent << "," << r.volumetricEfficiency_percent << ","
+            << r.fuelBurned_mg << "," << r.indicatedEfficiency_percent << ","
+            << r.exhaustTempFlowWeighted_C << "," << r.exhaustPortTemp_C << "\n";
 
         if (++m_indicatingLogLines % 50 == 0) m_indicatingLog.flush();
     }
@@ -1223,6 +1330,14 @@ void EngineSimApplication::processEngineInput() {
     const float dt = m_engine.GetFrameLength();
     const bool fineControlMode = m_engine.IsKeyDown(ysKey::Code::Space);
 
+    if (m_autostartDynoSpeed > 0 && !m_canRemote) {
+        m_simulator->m_dyno.m_enabled = true;
+        m_simulator->m_dyno.m_hold = true;
+        m_dynoSpeed = m_autostartDynoSpeed;
+        m_autostartDynoSpeed = 0;
+        m_infoCluster->setLogMessage("DYNOMOMETER HOLD (ENGINE_SIM_DYNO_HOLD)");
+    }
+
     const int mouseWheel = m_engine.GetMouseWheel();
     const int mouseWheelDelta = mouseWheel - m_lastMouseWheel;
     m_lastMouseWheel = mouseWheel;
@@ -1322,7 +1437,7 @@ void EngineSimApplication::processEngineInput() {
     }
 
     const double prevTargetThrottle = m_targetSpeedSetting;
-    m_targetSpeedSetting = fineControlMode ? m_targetSpeedSetting : 0.0;
+    m_targetSpeedSetting = fineControlMode ? m_targetSpeedSetting : m_restingThrottle;
     if (m_engine.IsKeyDown(ysKey::Code::Q)) {
         m_targetSpeedSetting = 0.01;
     }
@@ -1441,11 +1556,14 @@ void EngineSimApplication::processEngineInput() {
     m_dynoSpeed = clamp(m_dynoSpeed, minDynoSpeed, maxDynoSpeed);
     m_simulator->m_dyno.m_rotationSpeed = m_dynoSpeed;
 
+    const bool autostart = m_autostartTimer > 0;
+    if (autostart) m_autostartTimer -= dt;
+
     const bool prevStarterEnabled = m_simulator->m_starterMotor.m_enabled;
     if (m_canRemote) {
         m_simulator->m_starterMotor.m_enabled = m_hostControl.starter;
     }
-    else if (m_engine.IsKeyDown(ysKey::Code::S)) {
+    else if (m_engine.IsKeyDown(ysKey::Code::S) || autostart) {
         m_simulator->m_starterMotor.m_enabled = true;
     }
     else {
@@ -1467,6 +1585,10 @@ void EngineSimApplication::processEngineInput() {
     }
     else if (ignitionKeyPressed) {
         ignitionModule->m_enabled = !ignitionModule->m_enabled;
+    }
+    else if (m_autostartIgnition) {
+        ignitionModule->m_enabled = true;
+        m_autostartIgnition = false;
     }
 
     if (prevIgnitionEnabled != ignitionModule->m_enabled) {

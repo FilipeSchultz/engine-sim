@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Medições e datalog</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Medições e datalog</h1>
+  <p class="subtitulo">Variáveis internas da ECU gravadas em CSV pelo ENGINE_SIM_ECU_LOG</p>
+
+  <h2>Ligar o datalog</h2>
+<pre><code>set ENGINE_SIM_ECU_LOG=C:\temp\ecu.csv</code></pre>
+  <p>O arquivo recebe uma linha a cada 50 ms (20 Hz), com a coluna <code>time_s</code>, todas as medições registradas
+     pelas funções da ECU e, no fim, valores da planta que a ECU não enxerga. O arquivo é descarregado em disco a cada
+     20 linhas, então continua utilizável mesmo se o simulador for fechado à força.</p>
+
+  <h2>Medições da ECU</h2>
+  <table>
+    <tr><th>Coluna</th><th>Unidade</th><th>Função</th><th>Descrição</th></tr>
+    <tr><td><code>rpm</code></td><td>rpm</td><td>InputProcessing</td><td>Rotação média no último intervalo de ignição</td></tr>
+    <tr><td><code>map_kPa</code></td><td>kPa</td><td>InputProcessing</td><td>Pressão do coletor média no último intervalo de ignição</td></tr>
+    <tr><td><code>rpm_instant</code></td><td>rpm</td><td>InputProcessing</td><td>Rotação instantânea</td></tr>
+    <tr><td><code>map_instant_kPa</code></td><td>kPa</td><td>InputProcessing</td><td>Pressão do coletor instantânea</td></tr>
+    <tr><td><code>iat_C</code></td><td>°C</td><td>InputProcessing</td><td>Temperatura do ar de admissão</td></tr>
+    <tr><td><code>clt_C</code></td><td>°C</td><td>InputProcessing</td><td>Temperatura do líquido (constante 90 °C)</td></tr>
+    <tr><td><code>tps_percent</code></td><td>%</td><td>InputProcessing</td><td>Posição da borboleta</td></tr>
+    <tr><td><code>lambda_sensor</code></td><td>—</td><td>InputProcessing</td><td>Sonda wideband (0 = não pronta)</td></tr>
+    <tr><td><code>engine_state</code></td><td>—</td><td>EngineState</td><td>0 = parado, 1 = partida, 2 = funcionando</td></tr>
+    <tr><td><code>running_time_s</code></td><td>s</td><td>EngineState</td><td>Tempo desde a saída da partida</td></tr>
+    <tr><td><code>fuel_cut</code></td><td>—</td><td>RevLimiter</td><td>1 = limitador cortando combustível</td></tr>
+    <tr><td><code>lambda_target</code></td><td>—</td><td>LambdaControl</td><td>λ desejado</td></tr>
+    <tr><td><code>lambda_ctrl_active</code></td><td>—</td><td>LambdaControl</td><td>1 = malha fechada de λ ativa</td></tr>
+    <tr><td><code>fuel_corr_lambda</code></td><td>—</td><td>LambdaControl</td><td>Correção do controlador de λ</td></tr>
+    <tr><td><code>fuel_ecu</code></td><td>—</td><td>FuelControl</td><td>1 = injeção controlada pela ECU</td></tr>
+    <tr><td><code>injection_ms</code></td><td>ms</td><td>FuelControl</td><td>Tempo de injeção final (com tempo morto)</td></tr>
+    <tr><td><code>injection_base_ms</code></td><td>ms</td><td>FuelControl</td><td>Valor do <code>FuelBaseMap</code></td></tr>
+    <tr><td><code>fuel_corr_start</code></td><td>—</td><td>FuelControl</td><td>Fator de partida / pós-partida</td></tr>
+    <tr><td><code>fuel_corr_clt</code></td><td>—</td><td>FuelControl</td><td>Fator de temperatura do líquido</td></tr>
+    <tr><td><code>fuel_corr_iat</code></td><td>—</td><td>FuelControl</td><td>Fator de temperatura do ar</td></tr>
+    <tr><td><code>ignition_ecu</code></td><td>—</td><td>IgnitionControl</td><td>1 = avanço controlado pela ECU</td></tr>
+    <tr><td><code>advance_deg</code></td><td>°</td><td>IgnitionControl</td><td>Avanço final (antes do PMS)</td></tr>
+    <tr><td><code>advance_base_deg</code></td><td>°</td><td>IgnitionControl</td><td>Valor do <code>IgnAdvanceMap</code></td></tr>
+    <tr><td><code>advance_corr_clt_deg</code></td><td>°</td><td>IgnitionControl</td><td>Correção por temperatura do líquido</td></tr>
+    <tr><td><code>advance_corr_iat_deg</code></td><td>°</td><td>IgnitionControl</td><td>Correção por temperatura do ar</td></tr>
+  </table>
+  <p>A ordem das colunas segue a ordem de execução das funções. Uma medição nova adicionada no código aparece
+     automaticamente no datalog.</p>
+
+  <h2>Valores da planta (últimas colunas)</h2>
+  <table>
+    <tr><th>Coluna</th><th>Descrição</th></tr>
+    <tr><td><code>intake_afr</code></td><td>AFR no coletor de admissão (com injeção no pórtico, o coletor só tem ar)</td></tr>
+    <tr><td><code>cylinder_lambda</code></td><td>λ real no cilindro</td></tr>
+    <tr><td><code>throttle_percent</code></td><td>Pedal (comando do acelerador) em %</td></tr>
+    <tr><td><code>dyno_torque_Nm</code></td><td>Torque do dinamômetro, filtrado</td></tr>
+  </table>
+
+  <div class="dica">
+    <b>Dica:</b> para conferir o mapa de combustível, compare <code>lambda_sensor</code> (o que a ECU vê, com atraso de 0,1 s)
+    com <code>cylinder_lambda</code> (o valor real) num ponto estacionário.
+  </div>
+
+  <div class="pendente">Complete: ferramenta usada no laboratório para ver o datalog (Excel, Python, Concerto…) e um modelo de
+    gráfico padrão.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

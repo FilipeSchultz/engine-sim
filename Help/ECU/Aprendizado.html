@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Aprendizado de mapas</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Aprendizado de mapas</h1>
+  <p class="subtitulo">Criar o dataset da ECU para um motor novo a partir do comportamento do script</p>
+
+  <table class="ficha">
+    <tr><td>Variável</td><td><code>ENGINE_SIM_ECU_LEARN=&lt;arquivo.dcm&gt;</code></td></tr>
+    <tr><td>Código</td><td><code>src/ecu_learner.cpp</code> (ferramenta de bancada, fora da ECU)</td></tr>
+  </table>
+
+  <p>O <b>EcuLearner</b> registra, com as funções da ECU desligadas, a mistura (como o tempo de injeção equivalente com o
+     injetor calibrado) e o avanço que o script do motor usa em cada célula dos mapas. O resultado é um dataset que
+     reproduz o comportamento do script com a ECU no controle.</p>
+
+  <h2>Procedimento</h2>
+  <ol>
+    <li>Parta de um dataset existente e ajuste:
+      <ul>
+        <li>o eixo de rpm (<code>ST/X</code>) do <code>FuelBaseMap</code> e do <code>IgnAdvanceMap</code> para a faixa de rotação
+            do motor (o eixo de MAP normalmente fica);</li>
+        <li><code>InjectorFlow</code>, <code>InjectorDeadTime</code> e <code>CrankingRpm</code>.</li>
+      </ul></li>
+    <li>Ponha <code>EcuFuelEnable</code> e <code>EcuIgnEnable</code> em 0: o motor roda na mistura e no avanço do script.
+        Salve como <code>calibration.dcm</code>.</li>
+    <li>Abra o simulador com o aprendizado ligado:
+<pre><code>set ENGINE_SIM_ECU_LEARN=C:\temp\novo_motor.dcm
+Release\engine-sim-app.exe</code></pre></li>
+    <li>Varra a faixa de operação: várias rotações (dinamômetro em hold), rampas lentas de pedal e pontos estacionários.
+        O arquivo é gravado a cada 10 s e ao fechar, já com as duas funções da ECU ligadas.</li>
+    <li>Copie o resultado para <code>datasets\&lt;motor&gt;.dcm</code> e para <code>calibration.dcm</code>.</li>
+    <li>Depois ajuste as correções (curvas de temperatura, malha fechada de λ, limitador, ângulo de injeção) como numa ECU real.</li>
+  </ol>
+
+  <h2>Como os mapas são calculados</h2>
+  <ul>
+    <li>Cada ciclo de motor (720°) é acumulado: combustível, MAP médio, avanço médio. Só ciclos estacionários entram.</li>
+    <li>Para cada coluna de rpm, os ciclos são agrupados em faixas de 2 kPa de MAP; a curva é interpolada linearmente entre
+        as faixas e extrapolada pelos segmentos das pontas. Uma reta única não basta: em baixa rotação o combustível por ciclo
+        tem um joelho (refluxo do escape em carga leve).</li>
+    <li>Colunas de rpm sem dados copiam a coluna aprendida mais próxima.</li>
+    <li>O comentário no topo do arquivo informa quantas colunas de combustível e de ignição foram aprendidas
+        (ex.: <code>16 fuel and 16 ignition RPM columns learned</code>).</li>
+  </ul>
+
+  <div class="aviso">
+    <b>Atenção:</b> o mapa aprendido vale para o modelo de motor do momento. Depois de mudar o modelo de gás, a temperatura
+    de admissão, o <code>latent_heat</code> ou a frequência da simulação, confira o λ e reaprenda ou reescale o <code>FuelBaseMap</code>.
+  </div>
+
+  <div class="dica">
+    <b>Dica:</b> o aprendizado e o controle CAN podem rodar juntos: deixe a automação do banco varrer rotação e pedal
+    automaticamente para cobrir o mapa de forma uniforme.
+  </div>
+
+  <div class="pendente">Inclua o roteiro de varredura usado no laboratório (rotações, tempo por ponto, rampa de pedal) e
+    quanto tempo leva para cobrir um mapa.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

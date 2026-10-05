@@ -49,6 +49,10 @@ class IgnitionModule : public Part {
         }
         void clearAdvanceOverride() { m_advanceOverrideEnabled = false; }
 
+        // Cycle angle at which cylinder i fires with zero advance (its firing TDC)
+        double getFiringAngle(int i) const { return m_plugs[i].angle; }
+        int getCylinderCount() const { return m_cylinderCount; }
+
         bool m_enabled;
 
     protected:

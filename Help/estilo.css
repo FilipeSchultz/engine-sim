@@ -1,0 +1,126 @@
+/* Estilo das páginas de conteúdo. */
+
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  color: #222;
+  background: #fff;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.conteudo { max-width: 920px; padding: 14px 26px 40px 26px; }
+
+h1 {
+  font-size: 22px;
+  color: #142448;
+  margin: 4px 0 2px 0;
+  font-weight: 600;
+}
+.subtitulo {
+  color: #6b7a90;
+  font-size: 13px;
+  margin: 0 0 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #c8d0db;
+}
+h2 {
+  font-size: 17px;
+  color: #142448;
+  border-bottom: 2px solid #142448;
+  padding-bottom: 3px;
+  margin-top: 28px;
+}
+h3 { font-size: 15px; margin: 18px 0 4px 0; color: #142448; }
+
+a { color: #1a5bb5; }
+
+/* Capa da página inicial (splash da marca, já com o fundo azul) */
+.capa {
+  background: #142448;
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+  max-width: 640px;
+  margin: 6px 0 18px 0;
+}
+.capa img { width: 100%; display: block; }
+
+.cartao {
+  background: #f7f9fc;
+  border: 1px solid #d5dbe3;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 10px 0;
+}
+.cartao h3 { margin-top: 0; }
+
+table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+th, td { border: 1px solid #c8d0db; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #e3e8ef; }
+
+.aviso  { background: #fff4e0; border-left: 4px solid #e08a00; padding: 8px 12px; margin: 12px 0; }
+.perigo { background: #fde8e8; border-left: 4px solid #c62828; padding: 8px 12px; margin: 12px 0; }
+.dica   { background: #e8f4ea; border-left: 4px solid #2e7d32; padding: 8px 12px; margin: 12px 0; }
+
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; color: #fff; font-weight: 600; }
+.tag-op { background: #2e7d32; }
+.tag-tr { background: #6d6d6d; }
+
+code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  background: #eef2f7;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+pre {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  background: #eef2f7;
+  border: 1px solid #d5dbe3;
+  padding: 10px 12px;
+  overflow: auto;
+}
+pre code { background: none; padding: 0; }
+
+.tela { max-width: 100%; border: 1px solid #c8d0db; }   /* imagens (prints de tela) */
+
+/* Print ao lado da tabela que o explica (quebra para baixo em telas estreitas) */
+.lado { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; margin: 10px 0; }
+.lado > .tela { flex: 0 0 auto; width: 340px; }
+.lado > div { flex: 1 1 320px; min-width: 0; }
+.lado table { margin-top: 0; }
+
+/* Destaque dos termos pesquisados */
+mark.hl { background: #ffe066; color: inherit; padding: 0 1px; }
+
+ol li, ul li { margin-bottom: 4px; }
+
+.rodape {
+  font-size: 11px;
+  color: #888;
+  padding: 10px 26px;
+  border-top: 1px solid #e3e8ef;
+}
+
+@media print {
+  .conteudo { max-width: none; padding: 0; }
+  .capa { display: none; }
+  mark.hl { background: none; }
+}
+
+/* Trecho ainda a preencher (apague a caixa quando escrever o conteúdo) */
+.pendente {
+  border: 1px dashed #a9b6c8;
+  background: #fafbfd;
+  color: #7a8699;
+  font-style: italic;
+  padding: 8px 12px;
+  margin: 10px 0;
+}
+
+/* Linha "Classe / Herda de / Arquivo" no topo das páginas de tag */
+.ficha { border-collapse: collapse; width: auto; margin: 6px 0 14px 0; }
+.ficha td { border: 0; padding: 2px 14px 2px 0; }
+.ficha td:first-child { color: #6b7a90; }

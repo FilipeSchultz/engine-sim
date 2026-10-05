@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Arquivo DCM</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Arquivo DCM</h1>
+  <p class="subtitulo">Formato ASAM DCM 2.0, recarga ao vivo e um dataset por motor</p>
+
+  <table class="ficha">
+    <tr><td>Calibração ativa</td><td><code>assets/calibration/calibration.dcm</code></td></tr>
+    <tr><td>Datasets</td><td><code>assets/calibration/datasets/&lt;motor&gt;.dcm</code></td></tr>
+    <tr><td>Código</td><td><code>ecu/src/dcm_file.cpp</code></td></tr>
+  </table>
+
+  <h2>Recarga ao vivo</h2>
+  <p>O simulador verifica a data de modificação do <code>calibration.dcm</code> a cada 0,5 s. Ao detectar que o arquivo foi
+     salvo, lê, valida e aplica a calibração nova, com o motor funcionando. A mensagem
+     <code>ECU: calibration loaded (...)</code> confirma.</p>
+  <p>O arquivo é <b>rejeitado inteiro</b> — e a ECU continua com a calibração anterior — se tiver:</p>
+  <ul>
+    <li>erro de sintaxe (bloco incompleto, número inválido, falta de <code>END</code>);</li>
+    <li>tipo errado (um mapa escrito como valor, por exemplo);</li>
+    <li>tamanho diferente do esperado (os mapas têm 16 × 12 pontos, as curvas 8 ou 6);</li>
+    <li>valor ou ponto de eixo fora dos limites do parâmetro;</li>
+    <li>eixo que não é estritamente crescente.</li>
+  </ul>
+  <p>Parâmetros que faltam no arquivo mantêm o valor atual (aviso <code>N parameter(s) not in the file kept their values</code>);
+     parâmetros desconhecidos são ignorados com aviso.</p>
+
+  <h2>Formato</h2>
+  <p>Linhas que começam com <code>*</code> são comentários. O arquivo começa com <code>KONSERVIERUNG_FORMAT 2.0</code>.</p>
+
+  <h3>Valor (FESTWERT)</h3>
+<pre><code>FESTWERT InjectorFlow
+   LANGNAME "Injector static flow"
+   EINHEIT_W "cc/min"
+   WERT 400
+END</code></pre>
+
+  <h3>Curva (KENNLINIE)</h3>
+<pre><code>KENNLINIE FuelIatCorr 6
+   LANGNAME "Fuel factor vs intake air temperature"
+   EINHEIT_X "degC"
+   EINHEIT_W "-"
+   ST/X   -20     0    20    40    60    80
+   WERT  1.04  1.02  1.00  0.98  0.96  0.94
+END</code></pre>
+
+  <h3>Mapa (KENNFELD)</h3>
+  <p><code>ST/X</code> é o eixo de rpm (colunas). Cada linha <code>ST/Y</code> (MAP) é seguida pelos valores daquela linha:</p>
+<pre><code>KENNFELD FuelBaseMap 16 12
+   LANGNAME "Base injection time"
+   EINHEIT_X "rpm"
+   EINHEIT_Y "kPa"
+   EINHEIT_W "ms"
+   ST/X      300      350      400   ...     1200
+   ST/Y 10
+   WERT    0.000    0.000    0.000   ...    0.000
+   ST/Y 15
+   WERT    ...
+END</code></pre>
+
+  <div class="aviso">
+    <b>Atenção:</b> blocos <code>FESTWERTEBLOCK</code>, <code>STUETZSTELLENVERTEILUNG</code> (eixo compartilhado),
+    <code>GRUPPENKENNFELD</code>, <code>GRUPPENKENNLINIE</code>, <code>FESTKENNFELD</code>, <code>FESTKENNLINIE</code>
+    e <code>TEXTSTRING</code> não são suportados e são ignorados com aviso. Ao exportar de outra ferramenta, use
+    <code>FESTWERT</code>, <code>KENNLINIE</code> e <code>KENNFELD</code> com eixos próprios.
+  </div>
+
+  <h2>Datasets por motor</h2>
+  <p>A ECU lê só o <code>calibration.dcm</code>. Cada motor guarda sua cópia em <code>datasets\</code>:</p>
+  <table>
+    <tr><th>Dataset</th><th>Motor</th><th>Frequência da simulação</th></tr>
+    <tr><td><code>cfr.dcm</code></td><td>Waukesha CFR F1 (<code>engines/cfr/cfr_f1.mr</code>)</td><td>40 kHz</td></tr>
+    <tr><td><code>gm_ls.dcm</code></td><td>GM LS V8 (<code>engines/atg-video-2/07_gm_ls.mr</code>)</td><td>20 kHz</td></tr>
+  </table>
+  <p>Ao trocar de motor, copie o dataset dele sobre <code>calibration.dcm</code>. Para criar um dataset novo, veja
+     <a href="Aprendizado.html">Aprendizado de mapas</a>.</p>
+
+  <div class="dica">
+    <b>Dica:</b> antes de mexer na calibração de um teste, guarde uma cópia do <code>calibration.dcm</code>.
+    Os arquivos estão no git, então <code>git diff assets/calibration</code> mostra o que mudou.
+  </div>
+
+  <div class="pendente">Complete: editor recomendado para os mapas (texto, CANape, VISION, script Python) e o fluxo de
+    aprovação de uma calibração antes de um teste.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

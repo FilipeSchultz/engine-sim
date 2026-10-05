@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>ECU standalone</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>ECU standalone</h1>
+  <p class="subtitulo">A ECU como programa próprio, controlando o motor simulado (ou, no futuro, um motor real)</p>
+
+  <table class="ficha">
+    <tr><td>Executável</td><td><code>build\ecu\Release\ecu-standalone.exe</code></td></tr>
+    <tr><td>Código</td><td><code>ecu/standalone/</code> (programa), <code>ecu/include/ecu/link.h</code> (protocolo)</td></tr>
+    <tr><td>Lado do simulador</td><td><code>EcuHardware</code> (<code>include/ecu_hardware.h</code>)</td></tr>
+  </table>
+
+  <p>A ECU roda num programa separado, com o mesmo arquivo de calibração, o mesmo XCP e o mesmo datalog da ECU dentro do
+     simulador. O simulador faz o papel do <b>controlador de I/O</b>, o microcontrolador de uma bancada real: lê o virabrequim,
+     calcula a média de rotação e MAP por intervalo de ignição, manda uma amostra dos sensores a cada 10 ms e executa o comando
+     que a ECU devolve (injeção no ângulo pedido, avanço de ignição).</p>
+
+<pre><code> engine-sim-app (controlador de I/O)          ecu-standalone (ECU)
+  sensores a cada 10 ms  ── UDP 5600 ──►   funções, calibração, XCP, datalog
+  injeção / ignição      ◄── comando ────</code></pre>
+
+  <h2>Como usar</h2>
+  <ol>
+    <li>Abra a ECU com a calibração do motor:
+<pre><code>cd build\ecu\Release
+ecu-standalone.exe --cal ..\..\..\assets\calibration\calibration.dcm --xcp</code></pre></li>
+    <li>Abra o simulador com o link ligado:
+<pre><code>set ENGINE_SIM_ECU_LINK=1
+cd build
+Release\engine-sim-app.exe</code></pre>
+        ou, no script do motor, <code>set_ecu_settings(link: true)</code>.</li>
+    <li>No painel de informações do simulador aparece <code>ECU link: ecu-standalone connected</code>; na janela da ECU,
+        <b>Engine link</b> fica verde: <i>Communicating with the engine</i>.</li>
+  </ol>
+
+  <div class="dica">
+    <b>Dica:</b> a ordem não importa. Se o simulador abrir primeiro, o motor roda com a mistura e o avanço do script até a ECU
+    responder; se a ECU abrir primeiro, ela mostra <i>Waiting for the I/O controller</i> até chegarem amostras.
+  </div>
+
+  <h2>Janela da ECU</h2>
+  <table>
+    <tr><th>Indicador</th><th>Verde</th><th>Outras cores</th></tr>
+    <tr><td>Estado (canto superior)</td><td>RUNNING</td><td>STOPPED (cinza), FAILED (vermelho, veja as mensagens)</td></tr>
+    <tr><td>Engine link</td><td>Comunicando com o motor (amostras/s)</td>
+        <td>Laranja: esperando o controlador de I/O · Vermelho: sem dados há X s · Azul: estímulo, sem motor</td></tr>
+    <tr><td>XCP</td><td>Ferramenta conectada</td><td>Laranja: esperando ferramenta · Cinza: desligado (<code>--xcp</code>)</td></tr>
+    <tr><td>Calibration</td><td>Arquivo carregado (recarrega ao salvar)</td>
+        <td>Vermelho: arquivo rejeitado, valores anteriores mantidos · Azul: calibração com a ferramenta XCP</td></tr>
+    <tr><td>Datalog</td><td>Gravando a 20 Hz</td><td>Cinza: desligado (<code>--log</code>)</td></tr>
+  </table>
+  <p>Abaixo ficam os valores ao vivo (rotação, MAP, λ, injeção, avanço…) e as mensagens. Fechar a janela desliga a ECU.</p>
+
+  <h2>Opções da ECU</h2>
+  <table>
+    <tr><th>Opção</th><th>Função</th></tr>
+    <tr><td><code>--cal &lt;arquivo.dcm&gt;</code></td><td>Calibração (padrão <code>calibration.dcm</code> na pasta atual; criado com os valores padrão se não existir)</td></tr>
+    <tr><td><code>--xcp [endereço[:porta]]</code></td><td>Servidor XCP para o VISION (padrão <code>0.0.0.0:5555</code>). O A2L é gravado na pasta de onde a ECU foi aberta</td></tr>
+    <tr><td><code>--log &lt;arquivo.csv&gt;</code></td><td>Datalog de todas as medições da ECU, 20 Hz</td></tr>
+    <tr><td><code>--udp &lt;endereço[:porta]&gt;</code></td><td>Onde a ECU escuta o controlador de I/O (padrão <code>127.0.0.1:5600</code>; <code>0.0.0.0</code> aceita outros PCs)</td></tr>
+    <tr><td><code>--stimulus [k=v,...]</code></td><td>Sem motor: entradas fixas digitadas na janela (rpm, map, iat, clt, tps, lambda, battery), para mexer na calibração na bancada</td></tr>
+    <tr><td><code>--no-window</code></td><td>Só console</td></tr>
+  </table>
+
+  <h2>Sincronismo</h2>
+  <table>
+    <tr><th><code>link_sync</code></th><th>Comportamento</th><th>Quando usar</th></tr>
+    <tr><td><code>lockstep</code> (padrão)</td>
+        <td>A cada amostra o simulador espera o comando da ECU (até 50 ms). Resultado igual ao da ECU dentro do simulador</td>
+        <td>Calibração, comparação de resultados</td></tr>
+    <tr><td><code>free</code></td>
+        <td>O simulador nunca espera e aplica o último comando recebido: latência e perdas como numa bancada real</td>
+        <td>Ensaiar o comportamento com o microcontrolador real</td></tr>
+  </table>
+
+  <h2>Fail-safe</h2>
+  <p>Se nenhum comando chegar por <b>0,1 s</b> (ECU fechada, travada ou rede caída), o simulador corta as saídas da ECU e o
+     motor volta para a mistura e o avanço do script. O painel mostra
+     <code>ECU link: no command for 0.1 s, ECU outputs cut</code>. Quando a ECU volta a responder, ela reassume sozinha.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> com o link ligado, a ECU dentro do simulador não roda: calibração, XCP e datalog da ECU são os do
+    <code>ecu-standalone</code>. O <code>ENGINE_SIM_ECU_LOG</code> do simulador passa a gravar o lado do controlador de I/O
+    (estado do link, o que foi enviado e aplicado, λ real do cilindro, torque).
+  </div>
+
+  <h2>Injetores</h2>
+  <p>Os injetores agora pertencem ao motor: <code>injector_flow</code> [cc/min] e <code>injector_dead_time</code> [ms] no nó
+     <code>engine</code> do script (padrão 440 cc/min e 1 ms). Os parâmetros <code>InjectorFlow</code> e
+     <code>InjectorDeadTime</code> da calibração devem descrever os mesmos injetores, como numa ECU real.</p>
+
+  <h2>Protocolo</h2>
+  <p>Quadros CAN de 8 bytes (os mesmos que um microcontrolador usará num barramento CAN), em datagramas UDP:</p>
+  <table>
+    <tr><th>ID</th><th>Sentido</th><th>Conteúdo</th></tr>
+    <tr><td><code>0x100</code> Sensors</td><td>I/O → ECU</td><td>rpm, MAP (médias por intervalo de ignição), TPS, estado, contador</td></tr>
+    <tr><td><code>0x101</code> Sensors2</td><td>I/O → ECU</td><td>IAT, CLT, λ, bateria</td></tr>
+    <tr><td><code>0x102</code> Time</td><td>I/O → ECU</td><td>Relógio do controlador [µs], ciclos do motor</td></tr>
+    <tr><td><code>0x200</code> Command</td><td>ECU → I/O</td><td>Injeção [µs], ângulo de injeção, avanço, fuel/spark ativos, contador respondido</td></tr>
+  </table>
+  <p>Escalas e bits: <code>ecu/include/ecu/link.h</code>.</p>
+
+  <div class="pendente">Complete: link CAN (Kvaser) para o microcontrolador real, DBC do protocolo e o <code>.bat</code> do
+    laboratório que abre ECU e simulador juntos.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

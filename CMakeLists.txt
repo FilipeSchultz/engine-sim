@@ -4,6 +4,7 @@ option(DTV "Enable video output" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
 option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
 option(CAN_ENABLED "Enable CAN bus control (Kvaser CANlib)" OFF)
+option(ECU_XCP_ENABLED "Virtual ECU: XCP on Ethernet for calibration tools (XCPlite submodule)" OFF)
 set(CANLIB_DIR "C:/Program Files (x86)/Kvaser/Canlib" CACHE PATH "Kvaser CANlib SDK directory")
 
 if (DTV)
@@ -29,6 +30,9 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 project(engine-sim)
 
 set(CMAKE_CXX_STANDARD 17)
+
+# Virtual ECU (separate library, see ecu/README.md)
+add_subdirectory(ecu)
 
 # ========================================================
 # GTEST
@@ -69,6 +73,7 @@ add_library(engine-sim STATIC
     src/feedback_comb_filter.cpp
     src/filter.cpp
     src/fuel.cpp
+    src/flame_geometry.cpp
     src/function.cpp
     src/gas_system.cpp
     src/gaussian_filter.cpp
@@ -93,9 +98,8 @@ add_library(engine-sim STATIC
     src/vehicle.cpp
     src/vehicle_drag_constraint.cpp
     src/vtec_valvetrain.cpp
-    src/ecu/calibration.cpp
-    src/ecu/dcm_file.cpp
-    src/ecu/ecu.cpp
+    src/ecu_hardware.cpp
+    src/ecu_learner.cpp
     src/indicating_system.cpp
 
     # Include files
@@ -117,6 +121,7 @@ add_library(engine-sim STATIC
     include/feedback_comb_filter.h
     include/filter.h
     include/fuel.h
+    include/flame_geometry.h
     include/function.h
     include/gas_system.h
     include/gaussian_filter.h
@@ -142,13 +147,13 @@ add_library(engine-sim STATIC
     include/vehicle.h
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
-    include/ecu/calibration.h
-    include/ecu/dcm_file.h
-    include/ecu/ecu.h
+    include/ecu_hardware.h
+    include/ecu_learner.h
     include/indicating_system.h
 )
 
 target_link_libraries(engine-sim
+    engine-sim-ecu
     simple-2d-constraint-solver
     csv-io
     delta-basic)
@@ -348,6 +353,14 @@ endif (CAN_ENABLED)
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
+if (ECU_XCP_ENABLED)
+    # XCP_104.aml next to the executable and in the build directory (the
+    # A2L is written to the working directory)
+    add_custom_command(TARGET engine-sim-app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ECU_XCP_AML}" "$<TARGET_FILE_DIR:engine-sim-app>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ECU_XCP_AML}" "${CMAKE_BINARY_DIR}")
+endif ()
+
 add_subdirectory(dependencies)
 
 # GTEST
@@ -359,6 +372,7 @@ add_executable(engine-sim-test
     test/gas_system_tests.cpp
     test/function_test.cpp
     test/synthesizer_tests.cpp
+    test/ecu_tests.cpp
 )
 
 target_link_libraries(engine-sim-test
@@ -367,4 +381,5 @@ target_link_libraries(engine-sim-test
 )
 
 include(GoogleTest)
-gtest_discover_tests(engine-sim-test)
+# The first run of a freshly linked executable can be slow (antivirus scan)
+gtest_discover_tests(engine-sim-test DISCOVERY_TIMEOUT 60)

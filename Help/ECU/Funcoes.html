@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Funções da ECU</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Funções da ECU</h1>
+  <p class="subtitulo">O que cada função faz, em que tarefa roda e quais parâmetros usa</p>
+
+  <h2>Execução</h2>
+  <p>A ECU roda uma vez por passo da física. As funções são distribuídas em três tarefas: a cada passo,
+     a cada 10 ms e a cada 100 ms. Dentro de cada tarefa, a ordem de execução é a da tabela abaixo.</p>
+
+  <table>
+    <tr><th>Função</th><th>Tarefa</th><th>Faz</th><th>Calibração</th></tr>
+    <tr><td><b>InputProcessing</b></td><td>passo</td>
+        <td>rpm e MAP médios no último intervalo de ignição (remove a pulsação da admissão)</td><td>—</td></tr>
+    <tr><td><b>EngineState</b></td><td>passo</td>
+        <td>Parado / partida / funcionando, com histerese; tempo desde a partida</td><td><code>CrankingRpm</code></td></tr>
+    <tr><td><b>RevLimiter</b></td><td>passo</td><td>Corte de combustível acima de uma rotação</td>
+        <td><code>RevLimitRpm</code>, <code>RevLimitHysteresis</code></td></tr>
+    <tr><td><b>LambdaControl</b></td><td>10 ms</td><td>Controlador PI sobre a sonda wideband → fator de combustível</td>
+        <td><code>LambdaCtrlEnable</code>, <code>LambdaTarget</code>, <code>LambdaCtrlKp</code>, <code>LambdaCtrlKi</code>,
+            <code>LambdaCtrlLimit</code>, <code>LambdaCtrlStartDelay</code></td></tr>
+    <tr><td><b>FuelControl</b></td><td>10 ms</td><td>Tempo de injeção = mapa base × correções</td>
+        <td><code>EcuFuelEnable</code>, <code>InjectorFlow</code>, <code>InjectorDeadTime</code>, <code>FuelBaseMap</code>,
+            <code>CrankingFuelFactor</code>, <code>AfterStartTime</code>, <code>FuelCltCorr</code>, <code>FuelIatCorr</code></td></tr>
+    <tr><td><b>IgnitionControl</b></td><td>10 ms</td><td>Avanço = mapa base + correções</td>
+        <td><code>EcuIgnEnable</code>, <code>IgnAdvanceMap</code>, <code>IgnCltCorr</code>, <code>IgnIatCorr</code></td></tr>
+    <tr><td><b>Saída</b> (OutputStage)</td><td>passo</td>
+        <td>Um pulso de injeção por cilindro e ciclo, <code>InjectionAngle</code> graus antes do PMS de combustão do cilindro</td>
+        <td><code>InjectionAngle</code></td></tr>
+  </table>
+
+  <h2>Estado do motor</h2>
+  <table>
+    <tr><th>Estado</th><th>Condição</th></tr>
+    <tr><td>Funcionando (2)</td><td>rpm &gt; <code>CrankingRpm</code>. Continua funcionando até a rotação cair abaixo de 25 % de <code>CrankingRpm</code></td></tr>
+    <tr><td>Partida (1)</td><td>30 rpm &lt; rpm ≤ <code>CrankingRpm</code> (sem ter passado por funcionando)</td></tr>
+    <tr><td>Parado (0)</td><td>rpm ≤ 30</td></tr>
+  </table>
+
+  <h2>Combustível</h2>
+<pre><code>tempo aberto = (FuelBaseMap − InjectorDeadTime) × partida × FuelCltCorr(CLT) × FuelIatCorr(IAT) × controlador λ
+injeção      = tempo aberto + InjectorDeadTime           (0 enquanto o limitador corta combustível)</code></pre>
+  <ul>
+    <li><b>partida</b> é <code>CrankingFuelFactor</code> durante a partida e volta a 1 em <code>AfterStartTime</code> segundos
+        depois que o motor pega.</li>
+    <li>O mapa base é o tempo de injeção (rpm × MAP, com o tempo morto incluído), como numa ECU de pós-venda.</li>
+    <li>O injetor entrega <code>InjectorFlow × (pulso − InjectorDeadTime)</code> de combustível no pórtico, onde ele espera a
+        válvula de admissão abrir.</li>
+  </ul>
+
+  <h2>Ignição</h2>
+<pre><code>avanço = IgnAdvanceMap(rpm, MAP) + IgnCltCorr(CLT) + IgnIatCorr(IAT)</code></pre>
+
+  <h2>Controle de λ</h2>
+  <p>Ativo só quando todas as condições valem: <code>LambdaCtrlEnable</code> = 1, combustível pela ECU, sem corte do
+     limitador, motor funcionando há pelo menos <code>LambdaCtrlStartDelay</code> segundos e sonda pronta (λ &gt; 0).
+     Fora disso o integrador é zerado e o fator volta a 1.</p>
+<pre><code>erro     = λ medido − LambdaTarget              (pobre → erro positivo → mais combustível)
+integral = limita(integral + Ki × erro × dt, ±LambdaCtrlLimit)
+fator    = 1 + limita(Kp × erro + integral, ±LambdaCtrlLimit)</code></pre>
+
+  <h2>Limitador de rotação</h2>
+  <p>Com <code>RevLimitRpm</code> &gt; 0, o combustível é cortado acima dessa rotação e volta abaixo de
+     <code>RevLimitRpm − RevLimitHysteresis</code>. 0 desliga o limitador.</p>
+
+  <div class="dica">
+    <b>Dica:</b> parâmetros novos têm valores neutros por padrão (correções 1,0 / 0°, controle de λ e limitador desligados).
+    Um DCM antigo que não os tem continua se comportando como antes.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

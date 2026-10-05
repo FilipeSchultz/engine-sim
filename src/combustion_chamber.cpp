@@ -11,8 +11,47 @@
 
 #include <cmath>
 
+namespace {
+    // Rich mixture: the O2 oxidises all the fuel partially (CO, H2) instead
+    // of part of it completely. Heat released relative to complete combustion
+    // of the O2-limited fuel, from the heats of formation per CH2 unit:
+    // 90 kJ to CO + H2, then ~525 kJ per mol of O2 for CO -> CO2 / H2 -> H2O.
+    double partialOxidation(double phi) {
+        return (phi <= 1.0) ? 1.0 : std::fmax(1.2805 - 0.2805 * phi, 0.5);
+    }
+
+    // The mixture is not uniform: the local equivalence ratio is normally
+    // distributed around phi. Lean pockets leave O2, rich pockets leave fuel
+    // partially oxidised, so the heat released peaks slightly rich of
+    // stoichiometric. Relative to complete combustion of the O2-limited fuel.
+    double combustionHeatFactor(double phi, double nonuniformity) {
+        if (phi <= 0) return 1.0;
+        if (nonuniformity <= 0) return partialOxidation(phi);
+
+        constexpr int Points = 31;
+        double sum = 0, weights = 0;
+        for (int i = 0; i < Points; ++i) {
+            const double z = -3.0 + 6.0 * i / (Points - 1);
+            const double w = std::exp(-0.5 * z * z);
+            const double phi_local = std::fmax(phi * (1 + nonuniformity * z), 0.0);
+            sum += w * ((phi_local <= 1.0) ? phi_local : partialOxidation(phi_local));
+            weights += w;
+        }
+
+        return (sum / weights) / std::fmin(phi, 1.0);
+    }
+}
+
 CombustionChamber::CombustionChamber() {
     m_crankcasePressure = 0.0;
+    m_wallHeatTransfer = 0.0;
+    m_wallTemperature = units::celcius(90.0);
+    m_flameModel = 0;
+    m_gasModel = 0;
+    m_mixtureNonuniformity = 0.0;
+    m_sparkPlugOffset = 0.0;
+    m_cycleVariation = 0.0;
+    m_meanPistonSpeed = 0.0;
     m_piston = nullptr;
     m_head = nullptr;
     m_engine = nullptr;
@@ -35,7 +74,7 @@ CombustionChamber::CombustionChamber() {
     m_exhaustFlow = 0;
     m_exhaustFlowRate = 0;
     m_intakeFlowRate = 0;
-    m_ecuFuelRate = 0;
+    m_ecuFuelActive = false;
     m_ecuPendingFuel = 0;
 
     m_fuel = nullptr;
@@ -51,6 +90,13 @@ void CombustionChamber::initialize(const Parameters &params) {
     m_head = params.Head;
     m_fuel = params.Fuel;
     m_crankcasePressure = params.CrankcasePressure;
+    m_wallHeatTransfer = params.WallHeatTransfer;
+    m_wallTemperature = params.WallTemperature;
+    m_flameModel = params.FlameModel;
+    m_gasModel = params.GasModel;
+    m_mixtureNonuniformity = params.MixtureNonuniformity;
+    m_sparkPlugOffset = params.SparkPlugOffset;
+    m_cycleVariation = params.CycleVariation;
     m_meanPistonSpeedToTurbulence = params.MeanPistonSpeedToTurbulence;
 
     m_pistonSpeed = new double[StateSamples];
@@ -68,6 +114,9 @@ void CombustionChamber::initialize(const Parameters &params) {
 
     const double bore_r = m_head->getCylinderBank()->getBore() / 2.0;
     m_cylinderCrossSectionSurfaceArea = constants::pi * bore_r * bore_r;
+    if (m_flameModel == 2) {
+        m_flameGeometry.initialize(bore_r, m_sparkPlugOffset);
+    }
     m_cylinderWidthApproximation = std::sqrt(m_cylinderCrossSectionSurfaceArea);
 
     const double height = getVolume() / m_cylinderCrossSectionSurfaceArea;
@@ -86,7 +135,7 @@ void CombustionChamber::initialize(const Parameters &params) {
     m_intakeRunnerAndManifold.initialize(
         units::pressure(1.0, units::atm),
         totalIntakeRunnerVolume,
-        units::celcius(25.0));
+        intake->getAirTemperature());
     m_intakeRunnerAndManifold.setGeometry(
         overallIntakeRunnerLength,
         intakeRunnerWidth,
@@ -109,6 +158,11 @@ void CombustionChamber::initialize(const Parameters &params) {
         exhaustRunnerWidth,
         1.0,
         0.0);
+
+    // m_system is (re)initialised by the simulator and keeps the model
+    m_system.setHeatCapacityModel(m_gasModel);
+    m_intakeRunnerAndManifold.setHeatCapacityModel(m_gasModel);
+    m_exhaustRunnerAndPrimary.setHeatCapacityModel(m_gasModel);
 }
 
 void CombustionChamber::destroy() {
@@ -215,14 +269,191 @@ void CombustionChamber::ignite() {
             (mixingFactor * rand_s + (1 - mixingFactor));
         m_flameEvent.efficiency =
             efficiencyAttenuation * maxBurningEfficiency;
-        m_flameEvent.flameSpeed = m_fuel->flameSpeed(
-            turbulence,
-            afr,
-            m_system.temperature(),
-            m_system.pressure(),
-            calculateFiringPressure(),
-            units::pressure(160, units::psi));
+        m_flameEvent.heatFactor = (m_gasModel == 1)
+            ? combustionHeatFactor(m_fuel->getMolecularAfr() / afr, m_mixtureNonuniformity)
+            : 1.0;
+
+        if (m_flameModel == 1 || m_flameModel == 2) {
+            // Fresh air carries 3 mol of inert gas per mol of O2 and the
+            // combustion products are inert, so whatever is neither fuel nor
+            // fresh air is burned gas (residual)
+            const GasSystem::Mix &mix = m_system.mix();
+            m_flameEvent.turbulence = turbulence;
+            m_flameEvent.phi = m_fuel->getMolecularAfr() / afr;
+            m_flameEvent.residual = clamp(1.0 - mix.p_fuel - 4.0 * mix.p_o2);
+            m_flameEvent.sparkPressure = m_system.pressure();
+            m_flameEvent.sparkTemperature = m_system.temperature();
+            m_flameEvent.unburnedTemperature = m_flameEvent.sparkTemperature;
+            m_flameEvent.lastPressure = m_flameEvent.sparkPressure;
+            m_flameEvent.entrained = 0;
+            m_flameEvent.burned = 0;
+            m_flameEvent.radius = 0;
+
+            // Per mol of charge: fuel that can burn (O2 limited), the heat it
+            // releases at constant volume, the moles it adds and the burned
+            // gas composition, as in GasSystem::react()
+            // (gas model 1: in a rich mixture all the fuel ends up as products)
+            const double molecularAfr = m_fuel->getMolecularAfr();
+            const double efficiency = m_flameEvent.efficiency;
+            const double burnableFuel = efficiency * std::fmin(mix.p_fuel, mix.p_o2 / molecularAfr);
+            const double fuelReacted = (m_gasModel == 1) ? efficiency * mix.p_fuel : burnableFuel;
+            const double o2Reacted = burnableFuel * molecularAfr;
+            const double products = (34.0 / 27.0) * (1 + molecularAfr) * fuelReacted;
+            m_flameEvent.heatPerMol = burnableFuel * m_fuel->getMolecularMass()
+                * m_fuel->getEnergyDensity() * m_flameEvent.heatFactor;
+            m_flameEvent.moleGain = 1.0 + products - fuelReacted - o2Reacted;
+
+            GasSystem::Mix &burnedMix = m_flameEvent.burnedMix;
+            burnedMix.p_fuel = (mix.p_fuel - fuelReacted) / m_flameEvent.moleGain;
+            burnedMix.p_o2 = (mix.p_o2 - o2Reacted) / m_flameEvent.moleGain;
+            burnedMix.p_inert = 1.0 - burnedMix.p_fuel - burnedMix.p_o2;
+
+            if (m_flameModel == 2 && m_cycleVariation > 0) {
+                // Cycle-to-cycle variation: the flow field at the plug when
+                // the kernel forms (normal sample, Box-Muller)
+                const double u1 = (rand() + 1.0) / (RAND_MAX + 2.0);
+                const double u2 = (rand() + 1.0) / (RAND_MAX + 2.0);
+                const double normal =
+                    std::sqrt(-2.0 * std::log(u1)) * std::cos(2 * constants::pi * u2);
+                m_flameEvent.turbulence *= std::fmax(1.0 + m_cycleVariation * normal, 0.2);
+            }
+
+            m_flameEvent.flameSpeed = unburnedFlameSpeed();
+        }
+        else {
+            m_flameEvent.flameSpeed = m_fuel->flameSpeed(
+                turbulence,
+                afr,
+                m_system.temperature(),
+                m_system.pressure(),
+                calculateFiringPressure(),
+                units::pressure(160, units::psi));
+        }
     }
+}
+
+void CombustionChamber::convertRichFuel(double n_reacting, double fuelBurned) {
+    // Gas model 1: the fuel of the burning parcel that found no O2 ends up as
+    // CO and H2 (heat accounted by heatFactor), not as hot fuel vapour
+    if (m_gasModel != 1) return;
+
+    const double leftover = n_reacting * m_flameEvent.globalMix.p_fuel - fuelBurned;
+    if (leftover > 0) {
+        m_system.convertFuel(leftover, (34.0 / 27.0) * (1 + m_fuel->getMolecularAfr()));
+    }
+}
+
+void CombustionChamber::updateUnburnedTemperature() {
+    // The unburned gas ahead of the flame is compressed (isentropically) by
+    // the piston and by the expanding burned gas since the spark
+    const double p = m_system.pressure();
+    double &T_u = m_flameEvent.unburnedTemperature;
+    if (m_flameEvent.lastPressure > 0 && p > 0 && T_u > 0) {
+        const double g = (m_system.heatCapacityModel() == 0)
+            ? m_system.heatCapacityRatio()
+            : GasSystem::variableHeatCapacityRatio(T_u, m_flameEvent.globalMix);
+        T_u *= std::pow(p / m_flameEvent.lastPressure, (g - 1) / g);
+    }
+
+    m_flameEvent.lastPressure = p;
+}
+
+double CombustionChamber::unburnedFlameSpeed() const {
+    return m_fuel->turbulentFlameSpeed(
+        m_flameEvent.turbulence,
+        m_flameEvent.phi,
+        unburnedTemperature(),
+        m_system.pressure(),
+        m_flameEvent.residual);
+}
+
+void CombustionChamber::updateSphericalFlame(double dt, double volume) {
+    // Quasi-dimensional entrainment / burn-up model (Blizard & Keck,
+    // Tabaczynski): the turbulent flame front entrains unburned mixture at
+    // u' + S_L, the entrained eddies then burn at the laminar speed over the
+    // Taylor microscale. The flame is a sphere around the plug, clipped by the
+    // head, the liner and the piston.
+    constexpr double KernelRadius = units::distance(1.0, units::mm);
+
+    const double h = volume / m_cylinderCrossSectionSurfaceArea;
+    const double p = m_system.pressure();
+    const double T_u = unburnedTemperature();
+    const double n_charge = m_flameEvent.total_n;
+    if (p <= 0 || T_u <= 0 || n_charge <= 0) {
+        m_lit = false;
+        return;
+    }
+
+    const double S_L = m_fuel->laminarBurningVelocity(
+        m_flameEvent.phi, T_u, p, m_flameEvent.residual);
+    const double unburnedDensity = p / (constants::R * T_u);    // [mol/m^3]
+
+    // Volume behind the flame front: burned gas (expanded by the density
+    // ratio) plus the entrained gas not burned yet. Burned gas temperature
+    // from the energy balance at constant volume.
+    const int model = m_system.heatCapacityModel();
+    const int dof = m_system.degreesOfFreedom();
+    const double u_unburned = GasSystem::energyPerMol(T_u, m_flameEvent.globalMix, model, dof);
+    const double u_burned = (u_unburned + m_flameEvent.heatPerMol) / m_flameEvent.moleGain;
+    const double T_b = GasSystem::temperatureFromEnergy(u_burned, m_flameEvent.burnedMix, model, dof);
+    const double expansion = m_flameEvent.moleGain * T_b / T_u;
+    const double f_e = m_flameEvent.entrained;
+    const double f_b = m_flameEvent.burned;
+    const double V_front =
+        volume * (f_b * expansion + (f_e - f_b)) / (f_b * expansion + (1 - f_b));
+
+    const double r = std::fmax(m_flameGeometry.radius(V_front, h), KernelRadius);
+    const double A_front = m_flameGeometry.frontArea(r, h);
+    m_flameEvent.radius = r;
+    m_flameEvent.travel_x = std::fmin(r, m_head->getCylinderBank()->getBore() / 2);
+    m_flameEvent.travel_y = std::fmin(r, h);
+
+    // Turbulence scales: integral scale ~0.2 x chamber height, Taylor
+    // microscale from the turbulent Reynolds number (air viscosity from
+    // Heywood). The kernel only feels the eddies smaller than itself.
+    const double L_I = 0.2 * h;
+    const double viscosity = 3.3E-7 * std::pow(T_u, 0.7);
+    const double density = unburnedDensity * units::AirMolecularMass;
+    const double u = m_flameEvent.turbulence;
+    const double Re = std::fmax(u * L_I * density / viscosity, 1.0);
+    const double taylorScale = L_I * std::sqrt(15.0 / Re);
+    const double u_effective = u * (1 - std::exp(-r / L_I));
+
+    m_flameEvent.flameSpeed = u_effective + S_L;
+    m_flameEvent.entrained = std::fmin(
+        m_flameEvent.entrained
+            + unburnedDensity * A_front * (u_effective + S_L) * dt / n_charge,
+        1.0);
+
+    // End gas: once the front has swept nearly the whole chamber, the last
+    // pockets (corners, near the walls) are consumed in about the time the
+    // flame needs to cross an integral scale at the laminar speed
+    if (V_front > 0.98 * volume) {
+        m_flameEvent.entrained +=
+            (1 - m_flameEvent.entrained) * (1 - std::exp(-dt * S_L / L_I));
+        if (1 - m_flameEvent.entrained < 1E-5) m_flameEvent.entrained = 1.0;
+    }
+
+    const double tau = taylorScale / S_L;
+    const double burnFraction =
+        (m_flameEvent.entrained - m_flameEvent.burned) * (1 - std::exp(-dt / tau));
+    m_flameEvent.burned += burnFraction;
+    m_flameEvent.percentageLit = m_flameEvent.burned;
+
+    const double fuelBurned = m_system.react(
+        burnFraction * n_charge * m_flameEvent.efficiency, m_flameEvent.globalMix);
+    convertRichFuel(burnFraction * n_charge * m_flameEvent.efficiency, fuelBurned);
+    const double massFuelBurned = fuelBurned * m_fuel->getMolecularMass();
+    m_system.changeEnergy(massFuelBurned * m_fuel->getEnergyDensity() * m_flameEvent.heatFactor);
+    m_nBurntFuel += massFuelBurned;
+
+    if (m_flameEvent.entrained >= 1.0
+        && m_flameEvent.entrained - m_flameEvent.burned < 1E-4)
+    {
+        m_lit = false;
+    }
+
+    m_flameEvent.lastVolume = volume;
 }
 
 void CombustionChamber::update(double dt) {
@@ -232,6 +463,11 @@ void CombustionChamber::update(double dt) {
 
     m_intakeFlowRate = m_head->intakeFlowRate(m_piston->getCylinderIndex());
     m_exhaustFlowRate = m_head->exhaustFlowRate(m_piston->getCylinderIndex());
+
+    // Mean piston speed = 2 * stroke * revolutions per second
+    const Crankshaft *crankshaft = m_engine->getOutputCrankshaft();
+    m_meanPistonSpeed =
+        4 * crankshaft->getThrow() * std::abs(crankshaft->m_body.v_theta) / (2 * constants::pi);
 }
 
 void CombustionChamber::flow(double dt) {
@@ -245,9 +481,22 @@ void CombustionChamber::flow(double dt) {
         cylinderHeight * constants::pi * m_head->getCylinderBank()->getBore()
         + m_cylinderCrossSectionSurfaceArea * 2;
 
-    const double dT = units::celcius(90.0) - m_system.temperature();
+    const double T = m_system.temperature();
+    const double dT = m_wallTemperature - T;
 
-    m_system.changeEnergy(dT * cylinderSurfaceArea * 100 * dt);
+    // Heat transfer coefficient [W/(m^2 K)]
+    double h = 100.0;
+    if (m_wallHeatTransfer > 0 && T > 0 && volume > 0) {
+        // Hohenberg (1979), V [m^3], p [bar], T [K], mean piston speed [m/s]
+        const double p = units::convert(m_system.pressure(), units::bar);
+        h = m_wallHeatTransfer * 130.0
+            * std::pow(volume, -0.06)
+            * std::pow(std::fmax(p, 0.0), 0.8)
+            * std::pow(T, -0.4)
+            * std::pow(m_meanPistonSpeed + 1.4, 0.8);
+    }
+
+    m_system.changeEnergy(dT * cylinderSurfaceArea * h * dt);
     m_system.flow(m_piston->getBlowbyK(), dt, m_crankcasePressure, units::celcius(25.0));
 
     Intake *intake = m_head->getIntake(m_piston->getCylinderIndex());
@@ -272,17 +521,21 @@ void CombustionChamber::flow(double dt) {
     // ECU sequential injection: delivered into the cylinder with the intake
     // charge, after the exhaust valve has closed (during valve overlap it would
     // be scavenged straight into the exhaust)
-    m_ecuPendingFuel += m_ecuFuelRate * dt;
-    if (m_ecuFuelRate <= 0) {
-        m_ecuPendingFuel = 0;
-    }
-    else if (m_intakeFlowRate > 0 && m_exhaustFlowRate <= 0 && m_ecuPendingFuel > 0) {
+    if (m_ecuFuelActive && m_intakeFlowRate > 0 && m_exhaustFlowRate <= 0 && m_ecuPendingFuel > 0) {
         GasSystem::Mix pureFuel;
         pureFuel.p_fuel = 1.0;
         pureFuel.p_inert = 0.0;
         pureFuel.p_o2 = 0.0;
 
         m_system.gainN(m_ecuPendingFuel, m_system.kineticEnergyPerMol(), pureFuel);
+
+        // Evaporation cools the charge (capped: the fuel is delivered at once,
+        // possibly into little residual gas)
+        const double latentHeat =
+            m_ecuPendingFuel * m_fuel->getMolecularMass() * m_fuel->getLatentHeat();
+        if (latentHeat > 0) {
+            m_system.changeEnergy(-std::fmin(latentHeat, 0.5 * m_system.kineticEnergy()));
+        }
         intake->m_totalFuelInjected += m_ecuPendingFuel;
         m_ecuPendingFuel = 0;
     }
@@ -332,11 +585,22 @@ void CombustionChamber::flow(double dt) {
     m_lastTimestepTotalExhaustFlow += exhaustFlow;
     m_lastTimestepTotalIntakeFlow += intakeFlow;
 
-    if (m_lit) {
+    if (m_lit && (m_flameModel == 1 || m_flameModel == 2)) {
+        updateUnburnedTemperature();
+    }
+
+    if (m_lit && m_flameModel == 2) {
+        updateSphericalFlame(dt, volume);
+    }
+    else if (m_lit) {
         CylinderBank *bank = m_head->getCylinderBank();
         const double totalTravel_x = bank->getBore() / 2;
         const double totalTravel_y = volume / bank->boreSurfaceArea();
         const double expansion = volume / m_flameEvent.lastVolume;
+        if (m_flameModel == 1) {
+            m_flameEvent.flameSpeed = unburnedFlameSpeed();
+        }
+
         const double lastTravel_x = m_flameEvent.travel_x;
         const double lastTravel_y = m_flameEvent.travel_y * expansion;
         const double flameSpeed = m_flameEvent.flameSpeed;
@@ -357,9 +621,10 @@ void CombustionChamber::flow(double dt) {
 
             const double fuelBurned =
                 m_system.react(n * m_flameEvent.efficiency, m_flameEvent.globalMix);
+            convertRichFuel(n * m_flameEvent.efficiency, fuelBurned);
             const double massFuelBurned = fuelBurned * m_fuel->getMolecularMass();
             m_system.changeEnergy(
-                massFuelBurned * m_fuel->getEnergyDensity());
+                massFuelBurned * m_fuel->getEnergyDensity() * m_flameEvent.heatFactor);
 
             m_flameEvent.lit_n += n;
             m_flameEvent.percentageLit += litVolume / volume;

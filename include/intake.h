@@ -34,6 +34,9 @@ class Intake : public Part {
 
             // Velocity decay factor
             double VelocityDecay = 0.5;
+
+            // Temperature of the air drawn in
+            double AirTemperature = units::celcius(25.0);
         };
 
     public:
@@ -50,6 +53,12 @@ class Intake : public Part {
         inline double getRunnerLength() const { return m_runnerLength; }
         inline double getPlenumCrossSectionArea() const { return m_crossSectionArea; }
         inline double getVelocityDecay() const { return m_velocityDecay; }
+        inline double getAirTemperature() const { return m_airTemperature; }
+
+        void setHeatCapacityModel(int model) {
+            m_system.setHeatCapacityModel(model);
+            m_atmosphere.setHeatCapacityModel(model);
+        }
 
         GasSystem m_system;
         double m_throttle;
@@ -59,7 +68,7 @@ class Intake : public Part {
         double m_totalFuelInjected;
 
         // Set by the ECU: when active, only air enters through the throttle; the
-        // fuel comes from the port injectors (CombustionChamber::m_ecuFuelRate)
+        // fuel comes from the port injectors (CombustionChamber::injectFuel)
         bool m_ecuFuelActive;
 
     protected:
@@ -71,6 +80,7 @@ class Intake : public Part {
         double m_idleThrottlePlatePosition;
         double m_runnerLength;
         double m_velocityDecay;
+        double m_airTemperature;
 
         GasSystem m_atmosphere;
 };

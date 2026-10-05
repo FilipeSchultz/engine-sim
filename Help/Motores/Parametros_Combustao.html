@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Parâmetros de combustão</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Parâmetros de combustão</h1>
+  <p class="subtitulo">Entradas de engine(), fuel() e intake() adicionadas ou relevantes neste fork</p>
+
+  <p>Todas as entradas abaixo são opcionais. Os padrões reproduzem o engine-sim original. A física de cada modelo
+     está em <a href="../Modelagem/Modelagem.html">Modelagem física</a>.</p>
+
+  <h2>engine(...)</h2>
+  <table>
+    <tr><th>Entrada</th><th>Padrão</th><th>Significado</th></tr>
+    <tr><td><code>turbulence_ratio</code></td><td>0.5</td>
+        <td>Intensidade de turbulência no cilindro / velocidade média do pistão. Principal ajuste da velocidade de queima.
+            Maior para cabeçotes com swirl ou tumble forte</td></tr>
+    <tr><td><code>flame_model</code></td><td>0</td>
+        <td>0 = original (chama cilíndrica, velocidade calculada só na centelha). 1 = velocidade da chama atualizada a cada
+            passo pelo estado do gás não queimado, riqueza e gás residual. <b>2</b> = como 1, com chama esférica,
+            entranhamento e queima (recomendado). Ver <a href="../Modelagem/Modelos_Chama.html">Modelos de chama</a></td></tr>
+    <tr><td><code>spark_plug_offset</code></td><td>0.0</td>
+        <td>Modelo de chama 2: posição radial da vela / raio do cilindro (0 = vela central, ~0.8 = vela lateral)</td></tr>
+    <tr><td><code>cycle_variation</code></td><td>0.0</td>
+        <td>Modelo de chama 2: desvio padrão (fração) da turbulência vista pelo núcleo da chama em cada ciclo.
+            Define a variação ciclo a ciclo (COV do IMEP)</td></tr>
+    <tr><td><code>gas_model</code></td><td>0</td>
+        <td>0 = original (γ = 1,4 constante). <b>1</b> = calor específico variável com temperatura e composição, química de
+            mistura rica e não uniformidade da mistura (recomendado). Ver <a href="../Modelagem/Modelo_Gas.html">Modelo de gás</a></td></tr>
+    <tr><td><code>mixture_nonuniformity</code></td><td>0.1</td>
+        <td>Modelo de gás 1: desvio padrão da riqueza local / média. ~0,1 para carburador ou injeção no pórtico</td></tr>
+    <tr><td><code>wall_heat_transfer</code></td><td>0.0</td>
+        <td>Multiplicador do coeficiente de Hohenberg. 0 = coeficiente constante original (100 W/m²K, quase adiabático).
+            Com o modelo de gás 1 use a correlação publicada, <b>1.0</b>.
+            Ver <a href="../Modelagem/Transferencia_Calor.html">Transferência de calor</a></td></tr>
+    <tr><td><code>wall_temperature</code></td><td><code>(90 + 273.15) * units.K</code></td>
+        <td>Temperatura média das superfícies da câmara (cabeçote, camisa, topo do pistão, válvulas)</td></tr>
+  </table>
+
+  <h2>fuel(...)</h2>
+  <p>Já existiam, mas os padrões são para um motor de rua "áspero" e normalmente precisam mudar para um motor realista:</p>
+  <table>
+    <tr><th>Entrada</th><th>Padrão</th><th>Significado</th></tr>
+    <tr><td><code>energy_density</code></td><td>48.1 kJ/g</td>
+        <td>Poder calorífico inferior. Gasolina / iso-octano ≈ 43 a 44,3 kJ/g, diesel ≈ 42,8, etanol ≈ 26,8</td></tr>
+    <tr><td><code>max_burning_efficiency</code></td><td>0.8</td><td>Fração da carga que pode queimar. Use <b>1.0</b></td></tr>
+    <tr><td><code>burning_efficiency_randomness</code></td><td>0.5</td>
+        <td>Perda aleatória, ciclo a ciclo, da fração queimada. 0,5 dá COV de falha de combustão; 0,05 é um motor funcionando bem</td></tr>
+    <tr><td><code>max_turbulence_effect</code></td><td>2.0</td>
+        <td>Turbulência [m/s] acima da qual a carga queima por completo. Abaixo, parte do combustível não queima
+            (e a aleatoriedade acima se aplica). Deixe abaixo da turbulência do motor nas rotações normais</td></tr>
+    <tr><td><code>latent_heat</code></td><td>0</td>
+        <td>Calor de vaporização que o combustível injetado pela ECU retira da carga [J/kg]. Iso-octano 308 kJ/kg,
+            gasolina ~350 kJ/kg; use cerca da metade para carburador ou injeção no pórtico (parte evapora nas paredes).
+            Aumenta em alguns % o ar aprisionado em misturas ricas</td></tr>
+  </table>
+  <div class="dica">
+    <b>Dica:</b> com o modelo de chama 2, use <code>cycle_variation</code> para a variação ciclo a ciclo e mantenha
+    <code>burning_efficiency_randomness</code> baixo (ele só remove combustível ao acaso).
+  </div>
+
+  <h2>intake(...)</h2>
+  <table>
+    <tr><th>Entrada</th><th>Padrão</th><th>Significado</th></tr>
+    <tr><td><code>air_temperature</code></td><td><code>(25 + 273.15) * units.K</code></td>
+        <td>Temperatura do ar aspirado (ar condicionado da célula)</td></tr>
+  </table>
+  <div class="aviso">
+    <b>Atenção:</b> temperaturas são absolutas. Use só <code>units.K</code> e escreva °C como
+    <code>(t + 273.15) * units.K</code>.
+  </div>
+
+  <h2>Bloco de combustão (modelo)</h2>
+  <p>Ponto de partida com os valores calibrados do CFR. Ajuste conforme <a href="Calibracao_Motor.html">Calibrar contra dados reais</a>.</p>
+<pre><code>engine engine(
+    ...
+    fuel: fuel(
+        name: "...",
+        energy_density: 44.0 * units.kJ / units.g,
+        max_burning_efficiency: 1.0,
+        burning_efficiency_randomness: 0.05,
+        max_turbulence_effect: 1.2,
+        latent_heat: 150 * units.kJ / units.kg
+    ),
+    turbulence_ratio: 0.95,
+    flame_model: 2,
+    spark_plug_offset: 0.5,
+    cycle_variation: 0.2,
+    gas_model: 1,
+    mixture_nonuniformity: 0.1,
+    wall_heat_transfer: 1.0,
+    wall_temperature: (150.0 + 273.15) * units.K,
+    simulation_frequency: 20000
+)
+...
+intake intake(
+    ...
+    air_temperature: (25.0 + 273.15) * units.K
+)</code></pre>
+
+  <div class="aviso">
+    <b>Atenção:</b> o <code>turbulence_ratio</code> precisa ser reajustado ao trocar de modelo de chama
+    (CFR: modelo 0 → 1,0; modelo 1 → 0,6; modelo 2 → 0,9; modelo 2 com gás 1 → 0,95).
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Scripts de motor &middot; Revisão 0.1</div>
+</body>
+</html>

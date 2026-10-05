@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Início</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script src="_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <div class="capa"><img src="_sys/img/capa.svg" alt="Engine Rig Simulator"></div>
+
+  <h1>Engine Rig Simulator</h1>
+  <p class="subtitulo">ERS &middot; Célula de teste virtual baseada no engine-sim &middot; Ajuda do usuário</p>
+
+  <p>O Engine Rig Simulator é um fork do <b>engine-sim</b> (simulador de motor em tempo real) preparado
+     para funcionar como uma <b>célula de teste virtual</b>: o motor é simulado, um dinamômetro pode ser
+     comandado pela automação do banco via CAN, uma ECU virtual controla injeção e ignição a partir de uma
+     calibração DCM editável ao vivo, e um sistema de indicação envia a pressão no cilindro para análise de combustão.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> o engine-sim original foi feito para gerar som e resposta de motor, não como ferramenta
+    de engenharia. Os modelos adicionados neste fork (gás, calor, chama) aproximam o comportamento real, mas
+    os resultados devem ser calibrados e verificados contra dados medidos antes de qualquer conclusão.
+  </div>
+
+  <h2>Como usar esta ajuda</h2>
+  <ul>
+    <li><b>Conteúdo:</b> a aba da esquerda mostra todos os tópicos em árvore. Clique numa pasta para expandir.</li>
+    <li><b>Pesquisar:</b> digite uma ou mais palavras. A pesquisa ignora acentos e maiúsculas,
+        e mostra só as páginas que contêm todas as palavras. Ao abrir um resultado, os termos ficam destacados na página.</li>
+    <li><b>&#9664; &#9654;</b> no topo: voltar e avançar entre as páginas visitadas.</li>
+    <li>Os nomes de parâmetros, variáveis e arquivos aparecem como no código (<code>EcuFuelEnable</code>,
+        <code>ENGINE_SIM_INDI_UDP</code>), para poderem ser pesquisados.</li>
+  </ul>
+
+  <h2>Tópicos principais</h2>
+
+  <div class="cartao">
+    <h3><a href="Compilar_Executar.html">Compilar e executar</a></h3>
+    Dependências, opções do CMake (CAN, scripting), escolha do motor e primeira execução.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="Operacao/Controles.html">Operação</a></h3>
+    Teclas de controle, telas e instrumentos, dinamômetro (rotação constante e torque) e mensagens do sistema.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="Motores/Script_Motor.html">Scripts de motor (.mr)</a></h3>
+    Como escrever um motor, os parâmetros de combustão adicionados neste fork e a calibração contra dados reais,
+    com o motor de pesquisa CFR como exemplo.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="Modelagem/Modelagem.html">Modelagem física</a></h3>
+    Modelo de gás com calor específico variável, transferência de calor de Hohenberg e modelos de chama.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="ECU/ECU.html">ECU virtual</a></h3>
+    Funções de controle, parâmetros de calibração, arquivo DCM com recarga ao vivo, datalog e aprendizado de mapas.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="Comunicacao/CAN_EMCON.html">Comunicação</a></h3>
+    Controle do dinamômetro pela automação do banco via CAN (protocolo AVL EMCON, Kvaser) e integração XCP com o ATI VISION.
+  </div>
+
+  <div class="cartao">
+    <h3><a href="Indicacao/Indicacao.html">Indicação de combustão</a></h3>
+    Pressão no cilindro via UDP, IndiCom virtual (IMEP, CA50, liberação de calor) e log de indicação por ciclo.
+  </div>
+
+  <div class="dica">
+    <b>Dica:</b> a maior parte das funções deste fork é ligada por <a href="Variaveis_Ambiente.html">variáveis de ambiente</a>
+    definidas antes de abrir o simulador. Comece por essa página se algo "não aparece".
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Revisão 0.1</div>
+</body>
+</html>

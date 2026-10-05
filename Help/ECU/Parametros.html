@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Parâmetros de calibração</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Parâmetros de calibração</h1>
+  <p class="subtitulo">Lista completa: tipo, unidade, limites e valor padrão</p>
+
+  <p>Os parâmetros são declarados no código com nome, descrição, unidade, limites e padrão. Um valor fora dos limites
+     faz o arquivo DCM inteiro ser rejeitado. Tipos DCM: <b>FESTWERT</b> = valor, <b>KENNLINIE</b> = curva (1 eixo),
+     <b>KENNFELD</b> = mapa (2 eixos). Os eixos fazem parte da calibração e podem ser editados no DCM, desde que
+     estritamente crescentes; o número de pontos é fixo.</p>
+
+  <h2>Interruptores</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>EcuFuelEnable</code></td><td>FESTWERT</td><td>0 a 1</td><td>0</td><td>Combustível pelo <code>FuelBaseMap</code> (0 = mistura do script)</td></tr>
+    <tr><td><code>EcuIgnEnable</code></td><td>FESTWERT</td><td>0 a 1</td><td>0</td><td>Avanço pelo <code>IgnAdvanceMap</code> (0 = curva do script)</td></tr>
+  </table>
+
+  <h2>Combustível (FuelControl)</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Unidade</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>InjectorFlow</code></td><td>FESTWERT</td><td>cc/min</td><td>1 a 20000</td><td>440</td><td>Vazão estática do injetor</td></tr>
+    <tr><td><code>InjectorDeadTime</code></td><td>FESTWERT</td><td>ms</td><td>0 a 10</td><td>1,0</td><td>Tempo morto do injetor</td></tr>
+    <tr><td><code>FuelBaseMap</code></td><td>KENNFELD 16 × 12</td><td>ms</td><td>0 a 100</td><td>1,0</td><td>Tempo de injeção base (com tempo morto), rpm × MAP</td></tr>
+    <tr><td><code>CrankingFuelFactor</code></td><td>FESTWERT</td><td>—</td><td>0 a 5</td><td>1,0</td><td>Multiplicador durante a partida (0 = partida na mistura do script)</td></tr>
+    <tr><td><code>AfterStartTime</code></td><td>FESTWERT</td><td>s</td><td>0 a 60</td><td>0</td><td>Tempo para o fator de partida voltar a 1 depois que o motor pega</td></tr>
+    <tr><td><code>FuelCltCorr</code></td><td>KENNLINIE 8</td><td>—</td><td>0 a 5</td><td>1,0</td><td>Fator de aquecimento × temperatura do líquido</td></tr>
+    <tr><td><code>FuelIatCorr</code></td><td>KENNLINIE 6</td><td>—</td><td>0 a 5</td><td>1,0</td><td>Fator × temperatura do ar de admissão</td></tr>
+  </table>
+
+  <h2>Ignição (IgnitionControl)</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Unidade</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>IgnAdvanceMap</code></td><td>KENNFELD 16 × 12</td><td>°</td><td>−30 a 70</td><td>10</td><td>Avanço base antes do PMS, rpm × MAP</td></tr>
+    <tr><td><code>IgnCltCorr</code></td><td>KENNLINIE 8</td><td>°</td><td>−30 a 30</td><td>0</td><td>Avanço somado × temperatura do líquido</td></tr>
+    <tr><td><code>IgnIatCorr</code></td><td>KENNLINIE 6</td><td>°</td><td>−30 a 30</td><td>0</td><td>Avanço somado × temperatura do ar de admissão</td></tr>
+  </table>
+
+  <h2>Partida e limitador</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Unidade</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>CrankingRpm</code></td><td>FESTWERT</td><td>rpm</td><td>0 a 2000</td><td>400</td><td>Rotação abaixo da qual o motor é considerado em partida</td></tr>
+    <tr><td><code>RevLimitRpm</code></td><td>FESTWERT</td><td>rpm</td><td>0 a 20000</td><td>0</td><td>Corte de combustível acima desta rotação (0 = desligado)</td></tr>
+    <tr><td><code>RevLimitHysteresis</code></td><td>FESTWERT</td><td>rpm</td><td>0 a 2000</td><td>100</td><td>O combustível volta abaixo de <code>RevLimitRpm</code> menos este valor</td></tr>
+  </table>
+
+  <h2>Controle de λ (LambdaControl)</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Unidade</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>LambdaCtrlEnable</code></td><td>FESTWERT</td><td>—</td><td>0 a 1</td><td>0</td><td>Malha fechada de λ (0 = desligada)</td></tr>
+    <tr><td><code>LambdaTarget</code></td><td>FESTWERT</td><td>—</td><td>0,5 a 2,0</td><td>1,0</td><td>λ desejado</td></tr>
+    <tr><td><code>LambdaCtrlKp</code></td><td>FESTWERT</td><td>—</td><td>0 a 10</td><td>0,2</td><td>Ganho proporcional: correção por unidade de erro de λ</td></tr>
+    <tr><td><code>LambdaCtrlKi</code></td><td>FESTWERT</td><td>1/s</td><td>0 a 20</td><td>0,5</td><td>Ganho integral: correção por unidade de erro e por segundo</td></tr>
+    <tr><td><code>LambdaCtrlLimit</code></td><td>FESTWERT</td><td>—</td><td>0 a 0,5</td><td>0,25</td><td>Correção máxima do controlador (fração)</td></tr>
+    <tr><td><code>LambdaCtrlStartDelay</code></td><td>FESTWERT</td><td>s</td><td>0 a 120</td><td>3</td><td>Tempo depois da partida antes de ligar o controlador</td></tr>
+  </table>
+
+  <h2>Saída (OutputStage)</h2>
+  <table>
+    <tr><th>Parâmetro</th><th>Tipo</th><th>Unidade</th><th>Faixa</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>InjectionAngle</code></td><td>FESTWERT</td><td>°</td><td>0 a 720</td><td>400</td>
+        <td>Início da injeção, graus antes do PMS de combustão do cilindro (injeção no pórtico: o combustível espera a válvula abrir)</td></tr>
+  </table>
+
+  <h2>Eixos padrão</h2>
+  <table>
+    <tr><th>Eixo</th><th>Usado em</th><th>Limites</th><th>Pontos padrão</th></tr>
+    <tr><td>rpm (16)</td><td><code>FuelBaseMap</code>, <code>IgnAdvanceMap</code> (X)</td><td>0 a 20000</td>
+        <td>500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000</td></tr>
+    <tr><td>MAP kPa (12)</td><td><code>FuelBaseMap</code>, <code>IgnAdvanceMap</code> (Y)</td><td>0 a 400</td>
+        <td>10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 105</td></tr>
+    <tr><td>CLT °C (8)</td><td><code>FuelCltCorr</code>, <code>IgnCltCorr</code></td><td>−50 a 200</td><td>−40, −20, 0, 20, 40, 60, 80, 100</td></tr>
+    <tr><td>IAT °C (6)</td><td><code>FuelIatCorr</code>, <code>IgnIatCorr</code></td><td>−50 a 200</td><td>−20, 0, 20, 40, 60, 80</td></tr>
+  </table>
+  <p>Ajuste o eixo de rpm dos mapas à faixa do motor. Exemplo: o dataset do CFR usa 300 a 1200 rpm.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> o CLT lido pela ECU é sempre 90 °C (não há modelo térmico). As curvas <code>FuelCltCorr</code> e
+    <code>IgnCltCorr</code> só são usadas no ponto de 90 °C.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

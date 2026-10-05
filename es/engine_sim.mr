@@ -31,3 +31,4 @@ public import "utilities/utilities.mr"
 
 // Application settings
 public import "settings/application_settings.mr"
+public import "settings/ecu_settings.mr"

@@ -14,7 +14,7 @@
 
 #include <chrono>
 
-namespace ecu { class Ecu; }
+class EcuHardware;
 class IndicatingSystem;
 
 class Simulator {
@@ -80,9 +80,10 @@ public:
 
     double filteredEngineSpeed() const { return m_filteredEngineSpeed; }
 
-    // Optional ECU, updated once per physics step (not owned)
-    void setEcu(ecu::Ecu *ecu) { m_ecu = ecu; }
-    ecu::Ecu *getEcu() const { return m_ecu; }
+    // Optional ECU and its sensors / actuators, updated once per physics step
+    // (not owned)
+    void setEcuHardware(EcuHardware *hardware) { m_ecuHardware = hardware; }
+    EcuHardware *getEcuHardware() const { return m_ecuHardware; }
 
     // Optional combustion analysis, sampled once per physics step (not owned)
     void setIndicatingSystem(IndicatingSystem *indicating) { m_indicating = indicating; }
@@ -129,7 +130,7 @@ private:
 
     int m_steps;
 
-    ecu::Ecu *m_ecu = nullptr;
+    EcuHardware *m_ecuHardware = nullptr;
     IndicatingSystem *m_indicating = nullptr;
 };
 

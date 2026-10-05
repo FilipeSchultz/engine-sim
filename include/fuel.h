@@ -24,6 +24,10 @@ class Fuel {
             double maxTurbulenceEffect = 2.0;
             double maxDilutionEffect = 50.0;
             Function *turbulenceToFlameSpeedRatio = nullptr;
+
+            // Heat of vaporisation taken from the charge by injected fuel
+            // [J/kg], 0 = none
+            double latentHeat = 0.0;
         };
 
         Fuel();
@@ -39,6 +43,7 @@ class Fuel {
         inline double getMaxBurningEfficiency() const { return m_maxBurningEfficiency; }
         inline double getMaxTurbulenceEffect() const { return m_maxTurbulenceEffect; }
         inline double getMaxDilutionEffect() const { return m_maxDilutionEffect; }
+        inline double getLatentHeat() const { return m_latentHeat; }
 
         double flameSpeed(
             double turbulence,
@@ -48,6 +53,21 @@ class Fuel {
             double firingPressure,
             double motoringPressure) const;
         virtual double laminarBurningVelocity(double molecularAfr, double T, double P) const;
+
+        // Flame model 1: turbulent flame speed from the equivalence ratio phi
+        // (fuel/air relative to stoichiometric), the unburned gas temperature
+        // and pressure, and the burned gas mole fraction (residual dilution)
+        double turbulentFlameSpeed(
+            double turbulence,
+            double phi,
+            double T_unburned,
+            double P,
+            double burnedFraction) const;
+        double laminarBurningVelocity(
+            double phi,
+            double T_unburned,
+            double P,
+            double burnedFraction) const;
 
         double getMolecularAfr() const { return m_molecularAfr; }
 
@@ -62,6 +82,7 @@ class Fuel {
         double m_lowEfficiencyAttenuation;
         double m_maxTurbulenceEffect;
         double m_maxDilutionEffect;
+        double m_latentHeat;
 
         Function *m_turbulenceToFlameSpeedRatio;
 };

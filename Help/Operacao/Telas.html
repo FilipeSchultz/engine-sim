@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Telas e instrumentos</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Telas e instrumentos</h1>
+  <p class="subtitulo">Os três layouts da janela e o que cada painel mostra</p>
+
+  <p>A tecla <b>Tab</b> alterna entre três layouts:</p>
+  <table>
+    <tr><th>#</th><th>Layout</th><th>Conteúdo</th></tr>
+    <tr><td>1</td><td><b>Principal</b></td><td>Todos os painéis (descritos abaixo)</td></tr>
+    <tr><td>2</td><td><b>Motor</b></td><td>Só o desenho do motor, em tela inteira</td></tr>
+    <tr><td>3</td><td><b>Motor + instrumentos</b></td><td>Desenho do motor (2/3 da largura) e o painel de instrumentos da direita</td></tr>
+  </table>
+
+  <!-- Print da tela principal: salve em Help/img/ e descomente -->
+  <!-- <img class="tela" src="../img/Tela_Principal.png" alt="Tela principal"> -->
+  <div class="pendente">Inclua um print da tela principal (<code>img/Tela_Principal.png</code>) com os painéis numerados.</div>
+
+  <h2>Tela principal</h2>
+  <table>
+    <tr><th>Posição</th><th>Painel</th><th>Mostra</th></tr>
+    <tr><td>Esquerda, topo</td><td><b>Informações</b></td>
+        <td>Nome e dados do motor e a última mensagem do sistema
+            (ver <a href="Mensagens.html">Mensagens do sistema</a>)</td></tr>
+    <tr><td>Esquerda, abaixo das informações</td><td><b>Mixer</b></td>
+        <td>Parâmetros de som: Vol., Lvl., Conv., +HF, ~LF, ~HF</td></tr>
+    <tr><td>Esquerda, meio</td><td><b>Desempenho</b></td>
+        <td>RT/dT, FPS, 1/SPEED, LATENCY, IN. BUFFER, FREQUENCY (ver abaixo)</td></tr>
+    <tr><td>Esquerda, base</td><td><b>Carga</b></td>
+        <td>DYNO. SPEED, TORQUE, POWER, CLUTCH, marcha engatada e as luzes
+            Ignition, Starter, Dyno. e Hold</td></tr>
+    <tr><td>Centro, topo</td><td><b>Motor</b></td><td>Desenho animado do motor (pistões, válvulas, gases)</td></tr>
+    <tr><td>Centro, base</td><td><b>Osciloscópios</b></td>
+        <td>Torque/Power, Valve Lift, Flow, Waveform (áudio), pressure-volume e Total Exhaust Flow.
+            Clique num gráfico pequeno para ampliá-lo</td></tr>
+    <tr><td>Direita</td><td><b>Instrumentos</b></td>
+        <td>ENGINE SPEED, VEHICLE SPEED, MANIFOLD PRESSURE, VOLUMETRIC EFF., AIR SCFM,
+            LAMBDA, EX. O2 e consumo de combustível</td></tr>
+  </table>
+
+  <h2>Instrumentos</h2>
+  <table>
+    <tr><th>Instrumento</th><th>Significado</th></tr>
+    <tr><td>ENGINE SPEED</td><td>Rotação do motor, com a faixa vermelha a partir do <code>redline</code> do script</td></tr>
+    <tr><td>MANIFOLD PRESSURE</td><td>Pressão no coletor de admissão (unidade de <code>pressure_units</code> em <code>main.mr</code>)</td></tr>
+    <tr><td>VOLUMETRIC EFF.</td><td>Eficiência volumétrica instantânea</td></tr>
+    <tr><td>AIR SCFM</td><td>Vazão de ar de admissão</td></tr>
+    <tr><td>LAMBDA</td><td>λ dentro do cilindro. Com a injeção da ECU nos pórticos, o coletor só tem ar,
+        por isso este instrumento usa o λ do cilindro e não o do coletor. Escala λ × 100 (50 a 150)</td></tr>
+    <tr><td>EX. O2</td><td>Oxigênio no escape</td></tr>
+    <tr><td>DYNO. SPEED</td><td>Rotação pedida ao dinamômetro (hold)</td></tr>
+    <tr><td>TORQUE / POWER</td><td>Com o dinamômetro ligado: torque e potência medidos (filtrados).
+        Desligado: os valores máximos registrados</td></tr>
+    <tr><td>CLUTCH</td><td>Pressão da embreagem</td></tr>
+  </table>
+
+  <h2>Painel de desempenho</h2>
+  <p>Mostra se o PC está conseguindo simular em tempo real:</p>
+  <table>
+    <tr><th>Indicador</th><th>Significado</th></tr>
+    <tr><td>RT/dT</td><td>Tempo de processamento de um passo / duração simulada do passo. Acima de 1 a simulação não acompanha o tempo real</td></tr>
+    <tr><td>FPS</td><td>Quadros por segundo da tela</td></tr>
+    <tr><td>1 / SPEED</td><td>Fator de câmera lenta (teclas 1 a 5)</td></tr>
+    <tr><td>LATENCY</td><td>Atraso do áudio</td></tr>
+    <tr><td>IN. BUFFER</td><td>Amostras de áudio no buffer de entrada</td></tr>
+    <tr><td>FREQUENCY</td><td>Frequência da simulação (passos por segundo)</td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção:</b> se o PC não acompanha o tempo real, a rotação, o torque e os sinais enviados pelo CAN
+    deixam de corresponder ao relógio da automação. Reduza a frequência da simulação ou use um motor com menos cilindros.
+    Referência neste PC: cerca de 20 a 25 kHz para 8 cilindros, 40 kHz para 1 cilindro.
+  </div>
+
+  <div class="pendente">Confirme o significado exato de RT/dT, LATENCY e IN. BUFFER no código
+    (<code>src/performance_cluster.cpp</code>) e os valores aceitáveis no PC do banco.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Operação &middot; Revisão 0.1</div>
+</body>
+</html>

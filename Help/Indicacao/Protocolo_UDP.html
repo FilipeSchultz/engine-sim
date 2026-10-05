@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Protocolo UDP de indicação</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Protocolo UDP de indicação</h1>
+  <p class="subtitulo">Formato dos pacotes enviados pelo simulador (engine-sim → IndiCom), versão 1</p>
+
+  <table class="ficha">
+    <tr><td>Documento original</td><td><code>docs/indicom_protocol.md</code></td></tr>
+    <tr><td>Ligar</td><td><code>ENGINE_SIM_INDI_UDP=host:porta</code></td></tr>
+  </table>
+
+  <p>Little-endian. Cada pacote tem no máximo 1400 bytes e começa com um cabeçalho de 16 bytes:</p>
+
+  <h2>Cabeçalho</h2>
+  <table>
+    <tr><th>Offset</th><th>Tipo</th><th>Campo</th></tr>
+    <tr><td>0</td><td>char[4]</td><td>Assinatura <code>"ESIN"</code></td></tr>
+    <tr><td>4</td><td>uint8</td><td>Versão do protocolo (1)</td></tr>
+    <tr><td>5</td><td>uint8</td><td>Tipo do pacote: 1 = dados, 2 = informações do motor</td></tr>
+    <tr><td>6</td><td>uint16</td><td>Número de cilindros N</td></tr>
+    <tr><td>8</td><td>uint32</td><td>Número de sequência (comum aos dois tipos, +1 por pacote)</td></tr>
+    <tr><td>12</td><td>uint16</td><td>Número de registros (pacotes de dados); 0 nos demais</td></tr>
+    <tr><td>14</td><td>uint16</td><td>Reservado (0)</td></tr>
+  </table>
+
+  <h2>Tipo 1: dados</h2>
+  <p>Um registro por passo da física (taxa de amostragem = frequência da simulação, informada no pacote tipo 2):</p>
+  <table>
+    <tr><th>Tipo</th><th>Campo</th></tr>
+    <tr><td>float32</td><td>Ângulo do encoder [°], 0 ≤ ângulo &lt; 720, crescente com a rotação</td></tr>
+    <tr><td>float32 × N</td><td>Pressão dos cilindros 1..N [bar], absoluta mais o offset / ruído do sensor</td></tr>
+  </table>
+  <p>Com 8 cilindros cabem 38 registros por pacote.</p>
+
+  <h2>Tipo 2: informações do motor (1 vez por segundo)</h2>
+  <p>Dados que um operador normalmente digitaria; a ferramenta pode usá-los para preencher a configuração.</p>
+  <table>
+    <tr><th>Tipo</th><th>Campo</th></tr>
+    <tr><td>float32</td><td>Diâmetro [mm]</td></tr>
+    <tr><td>float32</td><td>Curso [mm]</td></tr>
+    <tr><td>float32</td><td>Comprimento da biela [mm]</td></tr>
+    <tr><td>float32</td><td>Taxa de compressão (0 até o motor girar)</td></tr>
+    <tr><td>float32</td><td>Frequência da simulação = taxa de amostragem [Hz]</td></tr>
+    <tr><td>float32 × N</td><td>Ângulo do encoder no PMS de combustão de cada cilindro [°] (−1 se ainda não conhecido)</td></tr>
+    <tr><td>uint8 + bytes</td><td>Nome do motor (prefixado pelo comprimento)</td></tr>
+  </table>
+
+  <div class="dica">
+    <b>Dica:</b> qualquer ferramenta que leia UDP pode receber o fluxo (Python, LabVIEW, MATLAB). O módulo
+    <code>tools\indicom\acquisition.py</code> é uma implementação de referência do receptor.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Indicação &middot; Revisão 0.1</div>
+</body>
+</html>

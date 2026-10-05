@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Indicação de combustão</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Indicação de combustão</h1>
+  <p class="subtitulo">Pressão no cilindro e análise de combustão, como num sistema de indicação de célula de teste</p>
+
+  <div class="cartao">
+    <b>Páginas deste tópico:</b>
+    <a href="Indicacao.html">Visão geral</a> &middot;
+    <a href="IndiCom.html">IndiCom virtual</a> &middot;
+    <a href="Protocolo_UDP.html">Protocolo UDP</a> &middot;
+    <a href="Log_Indicacao.html">Log de indicação</a>
+  </div>
+
+  <p>O simulador oferece a indicação de duas formas independentes, que podem ser usadas juntas:</p>
+  <table>
+    <tr><th>Forma</th><th>Variável</th><th>O que entrega</th><th>Para quê</th></tr>
+    <tr><td><b>Fluxo UDP</b></td><td><code>ENGINE_SIM_INDI_UDP</code></td>
+        <td>Sinais brutos: ângulo do encoder e pressão de cada cilindro, a cada passo da simulação</td>
+        <td>IndiCom virtual ou outra ferramenta de análise. Simula o hardware de indicação (sensor piezo + encoder)</td></tr>
+    <tr><td><b>Log por ciclo</b></td><td><code>ENGINE_SIM_INDI_LOG</code></td>
+        <td>CSV com uma linha por cilindro e ciclo: Pmax, IMEP, CA10/50/90, VE, massa de ar, eficiência…</td>
+        <td>Calibração do modelo e conferência: inclui grandezas que um banco real não mede (massa aprisionada, combustível queimado)</td></tr>
+  </table>
+
+  <h2>Fluxo UDP + IndiCom</h2>
+  <p>O simulador faz o papel do hardware: um sensor de pressão em cada cilindro e um encoder de ângulo. Toda a análise
+     (volume, IMEP, liberação de calor, CA10/50/90…) é feita pela ferramenta que recebe, a partir da geometria do motor
+     informada pelo operador — como num banco real.</p>
+  <ol>
+    <li>Configure o destino e, se quiser, as imperfeições do sensor:
+<pre><code>set ENGINE_SIM_INDI_UDP=127.0.0.1:5005
+set ENGINE_SIM_INDI_OFFSET_BAR=0.5
+set ENGINE_SIM_INDI_NOISE_BAR=0.05</code></pre></li>
+    <li>Abra o simulador (mensagem <code>INDI: streaming cylinder pressure to ...</code>) e o
+        <a href="IndiCom.html">IndiCom virtual</a>, ou use <code>tools\indicom\iniciar_com_simulador.bat</code>.</li>
+  </ol>
+
+  <h2>Imperfeições do sensor</h2>
+  <table>
+    <tr><th>Variável</th><th>Efeito</th><th>Como tratar</th></tr>
+    <tr><td><code>ENGINE_SIM_INDI_OFFSET_BAR</code></td>
+        <td>Cada sensor recebe um offset fixo aleatório em ±valor [bar] (sensores piezo só medem variação de pressão)</td>
+        <td>Pegging termodinâmico no IndiCom</td></tr>
+    <tr><td><code>ENGINE_SIM_INDI_NOISE_BAR</code></td><td>Ruído gaussiano, desvio padrão [bar]</td><td>Média de ciclos</td></tr>
+  </table>
+  <p>As imperfeições só afetam o fluxo UDP. O log por ciclo usa a pressão exata da simulação.</p>
+
+  <div class="dica">
+    <b>Dica:</b> o <code>tools\indicom\selftest.py</code> confere o fluxo sem a interface: <code>python selftest.py 8</code>
+    escuta por 8 s e imprime as médias por cilindro, para comparar com o log por ciclo.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Indicação &middot; Revisão 0.1</div>
+</body>
+</html>

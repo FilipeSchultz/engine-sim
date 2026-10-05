@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Scripts de motor (.mr)</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Scripts de motor (.mr)</h1>
+  <p class="subtitulo">Como escrever um motor para a célula de teste virtual</p>
+
+  <div class="cartao">
+    <b>Páginas deste tópico:</b>
+    <a href="Script_Motor.html">Escrever o script</a> &middot;
+    <a href="Parametros_Combustao.html">Parâmetros de combustão</a> &middot;
+    <a href="Calibracao_Motor.html">Calibrar contra dados reais</a> &middot;
+    <a href="Motor_CFR.html">Motor CFR</a> &middot;
+    <a href="Motores_Disponiveis.html">Motores disponíveis</a>
+  </div>
+
+  <p>Cada motor é um script na linguagem do engine-sim (<code>.mr</code>) que descreve geometria, comando de
+     válvulas, admissão, escape, combustível, ignição, veículo e transmissão. Os parâmetros adicionados neste fork
+     (modelo de gás, transferência de calor, modelo de chama, temperatura do ar) são <b>opcionais</b>: os padrões
+     reproduzem o engine-sim original, então motores antigos continuam iguais até você usá-los.</p>
+
+  <h2>Criar um motor novo</h2>
+  <ol>
+    <li>Copie um motor com o mesmo layout: o CFR (<code>assets/engines/cfr/cfr_f1.mr</code>) para monocilíndrico,
+        o <code>gm_ls</code> para V8.</li>
+    <li>Salve como <code>assets/engines/&lt;nome&gt;/&lt;nome&gt;.mr</code>.</li>
+    <li>Importe-o em <code>assets/main.mr</code> no lugar do motor atual:
+<pre><code>import "engines/&lt;nome&gt;/&lt;nome&gt;.mr"</code></pre></li>
+    <li>O arquivo precisa de um <code>public node main</code> que chame <code>set_engine</code>,
+        <code>set_vehicle</code> e <code>set_transmission</code> (veja o final do <code>cfr_f1.mr</code>).</li>
+    <li>Crie o dataset da ECU para o motor (veja <a href="../ECU/Aprendizado.html">Aprendizado de mapas</a>).</li>
+  </ol>
+
+  <h2>Geometria</h2>
+  <ul>
+    <li><code>bore</code>, <code>stroke</code>, <code>rod_length</code>, <code>compression_height</code>: dos dados do motor.</li>
+    <li>Taxa de compressão: deixe-a como entrada e calcule o volume da câmara,
+        <code>chamber_volume: displacement / (compression_ratio - 1)</code>, para mudá-la num só lugar.
+        O log de indicação e o IndiCom informam a taxa real (volume máx. / mín.): confira se bate.</li>
+    <li><code>deck_height: stroke / 2 + rod_length + compression_height</code>.</li>
+  </ul>
+
+  <h2>Comando de válvulas</h2>
+  <p>Escreva os centros dos cames em relação ao PMS de combustão, como no nó de comando do CFR:
+     PMS de combustão em 0 / 720°, PMS de cruzamento em 360°.</p>
+<pre><code>_exhaust_cam.add_lobe(rot360 - exhaust_lobe_center)
+_intake_cam.add_lobe(rot360 + intake_lobe_center)</code></pre>
+  <p>A partir dos tempos de assento publicados:</p>
+  <ul>
+    <li>centro da admissão = (AAA depois do PMS + 180 + FAA depois do PMI) / 2</li>
+    <li>centro do escape = (AAE antes do PMI + 180 + FAE depois do PMS) / 2</li>
+  </ul>
+  <p>A duração do <code>harmonic_cam_lobe</code> é dada a 0,050" de levantamento, um pouco menor que a duração de assento.</p>
+  <p>Tabelas de vazão dos pórticos (<code>add_flow_sample(lift_thou, cfm_at_28inH2O)</code>) raramente são publicadas;
+     estime-as pelo diâmetro da válvula. Em baixa rotação quase não importam (no CFR a 600 rpm, cortar a vazão em 50 % não mudou a VE).</p>
+
+  <h2>Admissão e borboleta</h2>
+  <ul>
+    <li><code>intake_flow_rate: k_carb(...)</code> dimensiona o corpo de borboleta. Grande demais, o pedal só tem
+        efeito nos últimos por cento: dimensione para a vazão máxima de ar do motor
+        (CFR: <code>k_carb(15)</code> para 0,6 L até 1200 rpm).</li>
+    <li><code>plenum_volume</code>: pequeno o bastante para a pressão do coletor estabilizar em cerca de 1 s na menor rotação.</li>
+    <li><code>idle_throttle_plate_position</code> e <code>idle_flow_rate</code> definem o ar com o pedal solto.</li>
+    <li><code>throttle_gamma</code> em <code>engine(...)</code> distribui o curso do pedal pela faixa útil.</li>
+    <li><code>air_temperature</code> em <code>intake(...)</code>: temperatura do ar da sala (ver
+        <a href="Parametros_Combustao.html">Parâmetros de combustão</a>).</li>
+  </ul>
+
+  <h2>Simulação e dinamômetro</h2>
+  <ul>
+    <li><code>simulation_frequency</code>: a resolução angular é <code>6 × rpm / frequência</code> graus por passo.
+        A indicação precisa de no máximo ~0,5°. Limite de tempo real neste PC: cerca de 20 a 25 kHz para 8 cilindros,
+        40 kHz para 1 cilindro. Os resultados mudam um pouco com a frequência: calibre na frequência em que vai rodar.</li>
+    <li><code>dyno_min_speed</code>, <code>dyno_max_speed</code>, <code>dyno_hold_step</code>: faixa e passo do hold pelo teclado
+        (ver <a href="../Operacao/Dinamometro.html">Dinamômetro</a>).</li>
+  </ul>
+
+  <div class="dica">
+    <b>Dica:</b> salve o script e pressione <b>Enter</b> no simulador para recarregá-lo, sem fechar o programa.
+  </div>
+
+  <div class="pendente">Complete: onde aparecem os erros de compilação do script (tela, arquivo de log) e como lê-los.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Scripts de motor &middot; Revisão 0.1</div>
+</body>
+</html>

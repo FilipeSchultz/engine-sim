@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>ECU virtual</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>ECU virtual</h1>
+  <p class="subtitulo">Unidade de controle do motor com calibração DCM editável ao vivo</p>
+
+  <table class="ficha">
+    <tr><td>Biblioteca</td><td><code>engine-sim-ecu</code> (pasta <code>ecu\</code>)</td></tr>
+    <tr><td>Lado da simulação</td><td><code>EcuHardware</code> (<code>src/ecu_hardware.cpp</code>), <code>EcuLearner</code> (<code>src/ecu_learner.cpp</code>)</td></tr>
+    <tr><td>Calibração ativa</td><td><code>assets/calibration/calibration.dcm</code></td></tr>
+  </table>
+
+  <div class="cartao">
+    <b>Páginas deste tópico:</b>
+    <a href="ECU.html">Visão geral</a> &middot;
+    <a href="Funcoes.html">Funções</a> &middot;
+    <a href="Parametros.html">Parâmetros</a> &middot;
+    <a href="Medicoes.html">Medições e datalog</a> &middot;
+    <a href="Arquivo_DCM.html">Arquivo DCM</a> &middot;
+    <a href="Aprendizado.html">Aprendizado de mapas</a> &middot;
+    <a href="Sensores.html">Sensores e atuadores</a> &middot;
+    <a href="Desenvolvimento.html">Estender a ECU</a>
+  </div>
+
+  <h2>Descrição</h2>
+  <p>A ECU é uma biblioteca separada, sem dependência da simulação: ela só conhece seus sensores, seus atuadores e sua
+     calibração, como uma ECU real numa bancada HIL. Controla <b>injeção nos pórticos</b> e <b>avanço de ignição</b>
+     a partir de mapas rpm × MAP, com correções por temperatura, controle de λ em malha fechada e limitador de rotação.</p>
+
+<pre><code> engine-sim (planta)                      ecu/ (biblioteca)
+┌──────────────────────┐   EcuInputs    ┌──────────────────────────────────────────┐
+│ EcuHardware          │ ─────────────► │ Ecu::step()                              │
+│  modelos de sensor:  │                │  1. entradas → EcuSignals                │
+│  virabrequim/comando,│                │  2. tarefas: passo / 10 ms / 100 ms      │
+│  MAP, IAT, CLT, TPS, │                │     InputProcessing → EngineState →      │
+│  λ                   │                │     RevLimiter → LambdaControl →         │
+│                      │                │     FuelControl → IgnitionControl        │
+│  modelos de atuador: │   EcuOutputs   │  3. saída: pulso de injeção no ângulo    │
+│  injetores, avanço   │ ◄───────────── │     de cada cilindro, avanço de ignição  │
+└──────────────────────┘                └──────────────────────────────────────────┘
+                                          calibração (DCM)   medições (datalog)</code></pre>
+
+  <h2>Ligar a ECU</h2>
+  <p>A ECU roda sempre, mas só assume o motor quando os interruptores da calibração estão em 1:</p>
+  <table>
+    <tr><th>Parâmetro</th><th>0</th><th>1</th></tr>
+    <tr><td><code>EcuFuelEnable</code></td><td>Mistura definida pelo script do motor</td><td>Injeção pelo <code>FuelBaseMap</code> e correções</td></tr>
+    <tr><td><code>EcuIgnEnable</code></td><td>Curva de avanço do script do motor</td><td>Avanço pelo <code>IgnAdvanceMap</code> e correções</td></tr>
+  </table>
+  <p>Na primeira execução, se <code>calibration.dcm</code> não existir, o simulador grava um arquivo padrão com as duas
+     funções desligadas (o motor se comporta como o script).</p>
+
+  <h2>Uso típico</h2>
+  <ol>
+    <li>Copie o dataset do motor (<code>assets/calibration/datasets/&lt;motor&gt;.dcm</code>) sobre <code>calibration.dcm</code>.</li>
+    <li>Abra o simulador. A mensagem <code>ECU: calibration loaded (fuel ON, ignition ON)</code> confirma a leitura.</li>
+    <li>Edite <code>calibration.dcm</code> num editor de texto e salve: a ECU recarrega em até 0,5 s, com o motor funcionando.</li>
+    <li>Para registrar o que a ECU faz, use <code>ENGINE_SIM_ECU_LOG</code> (ver <a href="Medicoes.html">Medições e datalog</a>).</li>
+  </ol>
+
+  <div class="aviso">
+    <b>Atenção:</b> uma alteração na calibração vale imediatamente. Um valor errado no <code>FuelBaseMap</code> ou no
+    <code>IgnAdvanceMap</code> pode apagar o motor ou mudar o torque de forma brusca durante um teste pelo CAN.
+  </div>
+
+  <div class="dica">
+    <b>Dica:</b> um arquivo inválido (sintaxe, valor fora dos limites, eixo não crescente) é rejeitado inteiro e a ECU
+    continua com a calibração anterior. Leia a mensagem no painel de informações para achar a linha.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>
+</body>
+</html>

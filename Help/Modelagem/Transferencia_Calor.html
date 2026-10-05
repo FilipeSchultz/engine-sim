@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Transferência de calor</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Transferência de calor</h1>
+  <p class="subtitulo">Perda de calor do gás para as paredes da câmara (Hohenberg, 1979)</p>
+
+  <table class="ficha">
+    <tr><td>Entradas</td><td><code>engine(wall_heat_transfer: 1.0, wall_temperature: ...)</code></td></tr>
+    <tr><td>Código</td><td><code>src/combustion_chamber.cpp</code></td></tr>
+  </table>
+
+  <p>Com <code>wall_heat_transfer</code> &gt; 0 a correlação de Hohenberg é aplicada a cada passo do escoamento:</p>
+<pre><code>h = k · 130 · V^-0.06 · p^0.8 · T^-0.4 · (Sp + 1.4)^0.8      [W/(m²K)]
+Q = h · A · (T_wall − T) · dt</code></pre>
+
+  <table>
+    <tr><th>Símbolo</th><th>Significado</th></tr>
+    <tr><td>V</td><td>Volume do cilindro [m³]</td></tr>
+    <tr><td>p</td><td>Pressão [bar]</td></tr>
+    <tr><td>T</td><td>Temperatura média do gás [K]</td></tr>
+    <tr><td>Sp</td><td>Velocidade média do pistão [m/s]</td></tr>
+    <tr><td>A</td><td>Área de troca: camisa + 2 × área do pistão</td></tr>
+    <tr><td>T_wall</td><td><code>wall_temperature</code></td></tr>
+    <tr><td>k</td><td><code>wall_heat_transfer</code></td></tr>
+  </table>
+
+  <h2>Qual valor usar</h2>
+  <table>
+    <tr><th>Situação</th><th><code>wall_heat_transfer</code></th></tr>
+    <tr><td>Original (sem o modelo)</td><td>0 — coeficiente constante de 100 W/m²K, quase adiabático</td></tr>
+    <tr><td>Com <code>gas_model: 1</code></td><td><b>1,0</b> (correlação publicada)</td></tr>
+    <tr><td>Com o gás original (γ = 1,4)</td><td>~2,5 seria necessário para baixar a eficiência, ao custo de perda de calor
+        exagerada depois da combustão. Não recomendado</td></tr>
+  </table>
+  <p>O ajuste fino da perda de calor é feito pela <code>wall_temperature</code> (passo 5 de
+     <a href="../Motores/Calibracao_Motor.html">Calibrar contra dados reais</a>). CFR calibrado: 150 °C.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> a geometria é de pistão e cabeçote planos (sem bowl, pent-roof ou squish), e a temperatura da parede
+    é uma constante: não há modelo térmico das paredes nem do líquido de arrefecimento.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Modelagem &middot; Revisão 0.1</div>
+</body>
+</html>

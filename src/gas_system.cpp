@@ -17,7 +17,7 @@ void GasSystem::initialize(double P, double V, double T, const Mix &mix, int deg
     m_degreesOfFreedom = degreesOfFreedom;
     m_state.n_mol = P * V / (constants::R * T);
     m_state.V = V;
-    m_state.E_k = T * (0.5 * degreesOfFreedom * m_state.n_mol * constants::R);
+    m_state.E_k = m_state.n_mol * energyPerMol(T, mix, m_heatCapacityModel, degreesOfFreedom);
     m_state.mix = mix;
     m_state.momentum[0] = m_state.momentum[1] = 0;
 
@@ -28,7 +28,7 @@ void GasSystem::initialize(double P, double V, double T, const Mix &mix, int deg
 
 void GasSystem::reset(double P, double T, const Mix &mix) {
     m_state.n_mol = P * volume() / (constants::R * T);
-    m_state.E_k = T * (0.5 * m_degreesOfFreedom * m_state.n_mol * constants::R);
+    m_state.E_k = m_state.n_mol * energyPerMol(T, mix, m_heatCapacityModel, m_degreesOfFreedom);
     m_state.mix = mix;
     m_state.momentum[0] = m_state.momentum[1] = 0;
 }
@@ -54,11 +54,11 @@ void GasSystem::changeVolume(double dV) {
 }
 
 void GasSystem::changePressure(double dP) {
-    m_state.E_k += dP * volume() * m_degreesOfFreedom * 0.5;
+    m_state.E_k += dP * volume() * effectiveDegreesOfFreedom() * 0.5;
 }
 
 void GasSystem::changeTemperature(double dT) {
-    m_state.E_k += dT * 0.5 * m_degreesOfFreedom * n() * constants::R;
+    m_state.E_k += dT * 0.5 * effectiveDegreesOfFreedom() * n() * constants::R;
 }
 
 void GasSystem::changeEnergy(double dE) {
@@ -76,7 +76,67 @@ void GasSystem::injectFuel(double n) {
 }
 
 void GasSystem::changeTemperature(double dT, double n) {
-    m_state.E_k += dT * 0.5 * m_degreesOfFreedom * n * constants::R;
+    m_state.E_k += dT * 0.5 * effectiveDegreesOfFreedom() * n * constants::R;
+}
+
+void GasSystem::setHeatCapacityModel(int model) {
+    // Same temperature, internal energy of the new model
+    const double T = temperature();
+    m_heatCapacityModel = model;
+    if (n() > 0) {
+        m_state.E_k = n() * energyPerMol(T, m_state.mix, model, m_degreesOfFreedom);
+    }
+}
+
+void GasSystem::meanHeatCapacity(const Mix &mix, double *a, double *b) {
+    // Mean c_v from 0 K to T as degrees of freedom, f = 2 c_v,mean / R = a + b T,
+    // fitted to tabulated (JANAF) internal energies:
+    //   air:          5.0 at 300 K .. 6.0 at 2500 K (gamma 1.40 at 300 K, 1.36 at 700 K)
+    //   burned gas:   stoichiometric products (N2, CO2, H2O), 5.2 at 300 K ..
+    //                 6.9 at 2500 K (instantaneous gamma ~1.22 at 2500 K)
+    //   fuel vapour:  iso-octane, c_v ~ 22 R at 300 K, ~42 R at 700 K
+    // Fresh air carries 3 mol of inert gas per mol of O2 and the combustion
+    // products are inert, so the inert gas beyond that is burned gas.
+    constexpr double a_air = 4.86, b_air = 0.00046;
+    constexpr double a_burned = 4.98, b_burned = 0.00078;
+    constexpr double a_fuel = 2.0, b_fuel = 0.063;
+
+    const double x_fuel = clamp(mix.p_fuel, 0.0, 1.0);
+    const double x_air = clamp(4.0 * mix.p_o2, 0.0, 1.0 - x_fuel);
+    const double x_burned = 1.0 - x_fuel - x_air;
+
+    *a = x_fuel * a_fuel + x_air * a_air + x_burned * a_burned;
+    *b = x_fuel * b_fuel + x_air * b_air + x_burned * b_burned;
+}
+
+double GasSystem::energyPerMol(double T, const Mix &mix, int model, int degreesOfFreedom) {
+    if (model == 0) return kineticEnergyPerMol(T, degreesOfFreedom);
+
+    double a, b;
+    meanHeatCapacity(mix, &a, &b);
+    return 0.5 * constants::R * T * (a + b * T);
+}
+
+double GasSystem::temperatureFromEnergy(double energyPerMol, const Mix &mix, int model, int degreesOfFreedom) {
+    if (model == 0) return energyPerMol / (0.5 * degreesOfFreedom * constants::R);
+    if (energyPerMol <= 0) return 0;
+
+    // 0.5 R (a T + b T^2) = u
+    double a, b;
+    meanHeatCapacity(mix, &a, &b);
+    return (-a + std::sqrt(a * a + 8 * b * energyPerMol / constants::R)) / (2 * b);
+}
+
+double GasSystem::flowEnergyPerMol(double T, const Mix &mix, int model, int degreesOfFreedom) {
+    const double u = energyPerMol(T, mix, model, degreesOfFreedom);
+    return (model == 0) ? u : u + constants::R * T;
+}
+
+double GasSystem::variableHeatCapacityRatio(double T, const Mix &mix) {
+    // c_v = du/dT = 0.5 R (a + 2 b T)
+    double a, b;
+    meanHeatCapacity(mix, &a, &b);
+    return 1.0 + 2.0 / (a + 2 * b * T);
 }
 
 double GasSystem::react(double n, const Mix &mix) {
@@ -126,6 +186,22 @@ double GasSystem::react(double n, const Mix &mix) {
     }
 
     return a_n_fuel;
+}
+
+void GasSystem::convertFuel(double n, double productsPerFuel) {
+    const double system_n_fuel = n_fuel();
+    n = std::fmin(n, system_n_fuel);
+    if (n <= 0) return;
+
+    const double system_n_inert = n_inert();
+    const double system_n_o2 = n_o2();
+    const double new_n = this->n() + n * (productsPerFuel - 1);
+    if (new_n <= 0) return;
+
+    m_state.n_mol = new_n;
+    m_state.mix.p_fuel = (system_n_fuel - n) / new_n;
+    m_state.mix.p_inert = (system_n_inert + n * productsPerFuel) / new_n;
+    m_state.mix.p_o2 = system_n_o2 / new_n;
 }
 
 double GasSystem::flowConstant(
@@ -398,6 +474,11 @@ double GasSystem::flow(const FlowParameters &params) {
 
     const double maxFlow = source->pressureEquilibriumMaxFlow(sink);
     flow = clamp(flow, 0.0, 0.9 * source->n());
+    if (source->m_heatCapacityModel != 0 && source->n() > 0) {
+        // Enthalpy is larger than the internal energy: keep energy for the
+        // gas left in the source
+        flow = std::fmin(flow, 0.9 * source->kineticEnergy() / source->flowEnergyPerMol());
+    }
 
     const double fraction = flow / source->n();
     const double fractionVolume = fraction * source->volume();
@@ -413,7 +494,7 @@ double GasSystem::flow(const FlowParameters &params) {
 
         const double s0 = source->totalEnergy() + sink->totalEnergy();
 
-        const double E_k_per_mol = source->kineticEnergyPerMol();
+        const double E_k_per_mol = source->flowEnergyPerMol();
         sink->gainN(flow, E_k_per_mol, source->mix());
         source->loseN(flow, E_k_per_mol);
 
@@ -520,7 +601,7 @@ double GasSystem::flow(const FlowParameters &params) {
 }
 
 double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix) {
-    const double maxFlow = pressureEquilibriumMaxFlow(P_env, T_env);
+    const double maxFlow = pressureEquilibriumMaxFlow(P_env, T_env, mix);
     double flow = dt * flowRate(
         k_flow,
         pressure(),
@@ -537,14 +618,14 @@ double GasSystem::flow(double k_flow, double dt, double P_env, double T_env, con
 
     if (flow < 0) {
         const double bulk_E_k_0 = bulkKineticEnergy();
-        gainN(-flow, kineticEnergyPerMol(T_env, m_degreesOfFreedom), mix);
+        gainN(-flow, flowEnergyPerMol(T_env, mix, m_heatCapacityModel, m_degreesOfFreedom), mix);
         const double bulk_E_k_1 = bulkKineticEnergy();
 
         m_state.E_k += (bulk_E_k_1 - bulk_E_k_0);
     }
     else {
         const double starting_n = n();
-        loseN(flow, kineticEnergyPerMol());
+        loseN(flow, flowEnergyPerMol());
 
         m_state.momentum[0] -= (flow / starting_n) * m_state.momentum[0];
         m_state.momentum[1] -= (flow / starting_n) * m_state.momentum[1];
@@ -567,26 +648,32 @@ double GasSystem::pressureEquilibriumMaxFlow(const GasSystem *b) const {
     // pressure_a = Q_a * (E_a + dn * D_b)
     // pressure_b = Q_b * (E_b - dn * D_b)
 
+    // With the effective degrees of freedom of each side (equal in the
+    // constant heat capacity model, where they cancel out)
+    const double fV_a = effectiveDegreesOfFreedom() * volume();
+    const double fV_b = b->effectiveDegreesOfFreedom() * b->volume();
+
     if (pressure() > b->pressure()) {
         const double maxFlow =
-                (b->volume() * kineticEnergy() - volume() * b->kineticEnergy()) /
-                (b->volume() * kineticEnergyPerMol() + volume() * kineticEnergyPerMol());
+                (fV_b * kineticEnergy() - fV_a * b->kineticEnergy()) /
+                ((fV_b + fV_a) * kineticEnergyPerMol());
         return std::fmax(0.0, std::fmin(maxFlow, n()));
     }
     else {
         const double maxFlow =
-                (b->volume() * kineticEnergy() - volume() * b->kineticEnergy()) /
-                (b->volume() * b->kineticEnergyPerMol() + volume() * b->kineticEnergyPerMol());
+                (fV_b * kineticEnergy() - fV_a * b->kineticEnergy()) /
+                ((fV_b + fV_a) * b->kineticEnergyPerMol());
         return std::fmin(0.0, std::fmax(maxFlow, -b->n()));
     }
 }
 
-double GasSystem::pressureEquilibriumMaxFlow(double P_env, double T_env) const {
+double GasSystem::pressureEquilibriumMaxFlow(double P_env, double T_env, const Mix &mix) const {
+    const double f = effectiveDegreesOfFreedom();
     if (pressure() > P_env) {
-        return -(P_env * (0.5 * m_degreesOfFreedom * volume()) - kineticEnergy()) / kineticEnergyPerMol();
+        return -(P_env * (0.5 * f * volume()) - kineticEnergy()) / flowEnergyPerMol();
     }
     else {
-        const double E_k_per_mol_env = 0.5 * T_env * constants::R * m_degreesOfFreedom;
-        return -(P_env * (0.5 * m_degreesOfFreedom * volume()) - kineticEnergy()) / E_k_per_mol_env;
+        const double E_k_per_mol_env = flowEnergyPerMol(T_env, mix, m_heatCapacityModel, m_degreesOfFreedom);
+        return -(P_env * (0.5 * f * volume()) - kineticEnergy()) / E_k_per_mol_env;
     }
 }

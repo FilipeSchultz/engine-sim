@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Engine Rig Simulator</title>
+  <link rel="icon" href="_sys/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="_sys/frame.css">
+  <script src="_sys/toc.js"></script>
+  <script src="_sys/frame.js"></script>
+</head>
+<body>
+
+  <div class="cabecalho">
+    <a class="marca" id="marca" title="Página inicial">
+      <img src="_sys/img/logo.svg" alt="ERS">
+      <span class="marca-texto">
+        <span class="marca-nome">Engine Rig <b>Simulator</b></span>
+        <span class="marca-sub">ERS &middot; Ajuda do usuário</span>
+      </span>
+    </a>
+    <span class="sep"></span>
+    <span class="pagina" id="tituloPagina"></span>
+    <div class="ferramentas">
+      <button id="btnVoltar"   title="Voltar">&#9664;</button>
+      <button id="btnAvancar"  title="Avançar">&#9654;</button>
+      <button id="btnInicio"   title="Página inicial">Início</button>
+      <button id="btnImprimir" title="Imprimir esta página">Imprimir</button>
+    </div>
+  </div>
+
+  <div class="corpo">
+    <div class="lateral" id="lateral">
+      <div class="abas">
+        <div class="aba sel" id="abaConteudo">Conteúdo</div>
+        <div class="aba" id="abaPesquisa">Pesquisar</div>
+      </div>
+
+      <div class="painel" id="painelConteudo">
+        <div class="barra-arvore">
+          <a id="btnExpandir">Expandir tudo</a>
+          <a id="btnRecolher">Recolher tudo</a>
+        </div>
+        <ul id="arvore"></ul>
+      </div>
+
+      <div class="painel" id="painelPesquisa" style="display:none">
+        <div class="caixa-busca">
+          <input type="text" id="campoBusca" placeholder="Digite uma ou mais palavras…" autocomplete="off">
+          <div class="status" id="statusBusca"></div>
+        </div>
+        <div id="resultados"></div>
+      </div>
+    </div>
+
+    <div class="divisor" id="divisor" title="Arraste para ajustar a largura"></div>
+
+    <div class="principal">
+      <iframe id="frameConteudo" title="Conteúdo da ajuda"></iframe>
+    </div>
+
+    <div class="capa-arraste" id="capaArraste"></div>
+  </div>
+
+</body>
+</html>

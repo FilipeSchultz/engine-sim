@@ -1,6 +1,7 @@
 #include "../include/indicating_system.h"
 
 #include "../include/engine.h"
+#include "../include/constants.h"
 #include "../include/units.h"
 
 #include <cmath>
@@ -33,6 +34,8 @@ IndicatingSystem::IndicatingSystem() {
     m_time = 0;
     m_analysis = false;
     m_rawCapture = false;
+    m_fuelEnergyDensity = 0;
+    m_airTemperature = units::celcius(25.0);
 }
 
 void IndicatingSystem::reset() {
@@ -96,7 +99,13 @@ void IndicatingSystem::sample(Engine *engine, double dt) {
         s.pressure = chamber->m_system.pressure();
         s.volume = chamber->getVolume();
         s.burnedFuel = chamber->m_nBurntFuel;
-        s.valvesClosed = !chamber->isIntakeValveOpen() && !chamber->isExhaustValveOpen();
+        s.intakeOpen = chamber->isIntakeValveOpen();
+        s.valvesClosed = !s.intakeOpen && !chamber->isExhaustValveOpen();
+        s.intakeFlow = chamber->getLastTimestepIntakeFlow();
+        s.moles = chamber->m_system.n();
+        s.exhaustFlow = chamber->getLastTimestepExhaustFlow();
+        s.gasTemp = chamber->m_system.temperature();
+        s.portTemp = chamber->m_exhaustRunnerAndPrimary.temperature();
 
         if (m_rawCapture) {
             m_raw.push_back(static_cast<float>(units::convert(s.pressure, units::bar)));
@@ -157,6 +166,10 @@ void IndicatingSystem::sample(Engine *engine, double dt) {
         }
     }
 
+    m_fuelEnergyDensity = engine->getFuel()->getEnergyDensity();
+    if (engine->getIntakeCount() > 0) {
+        m_airTemperature = engine->getIntake(0)->getAirTemperature();
+    }
     updateEngineInfo(engine);
 }
 
@@ -271,6 +284,57 @@ void IndicatingSystem::analyze(int cylinderIndex, double tdcAngle) {
         crossing(angles, mfb, kStart, 0.9, &result.ca90_deg);
         crossing(angles, reference, 0, 0.5, &result.ca50Reference_deg);
     }
+
+    // Gas exchange: net flow through the intake valve from the gas exchange TDC
+    // to the firing TDC (backflow counts negative) and the cylinder content
+    // when the intake valve closes. Masses use the molar mass of air.
+    double freshMoles = 0, trappedMoles = 0;
+    for (size_t k = 0; k < cycle.size(); ++k) {
+        const Sample &s = *cycle[k];
+        if (s.angle <= tdcAngle - 360.0 || s.angle > tdcAngle) continue;
+
+        freshMoles += s.intakeFlow;
+        if (k > 0 && cycle[k - 1]->intakeOpen && !s.intakeOpen) {
+            trappedMoles = s.moles;
+        }
+    }
+
+    const double freshMass = freshMoles * units::AirMolecularMass;
+    const double trappedMass = trappedMoles * units::AirMolecularMass;
+    const double ambientDensity =
+        units::pressure(1.0, units::atm) * units::AirMolecularMass
+        / (constants::R * m_airTemperature);
+
+    result.freshCharge_mg = units::convert(freshMass, units::g) * 1000.0;
+    result.trappedMass_mg = units::convert(trappedMass, units::g) * 1000.0;
+    result.residual_percent = (trappedMass > 0)
+        ? 100.0 * (trappedMass - freshMass) / trappedMass
+        : 0.0;
+    result.volumetricEfficiency_percent = (displacement > 0)
+        ? 100.0 * freshMass / (ambientDensity * displacement)
+        : 0.0;
+    result.fuelBurned_mg = units::convert(fuelBurned, units::g) * 1000.0;
+
+    const double fuelEnergy = fuelBurned * m_fuelEnergyDensity;
+    result.indicatedEfficiency_percent = (fuelEnergy > 0)
+        ? 100.0 * grossWork / fuelEnergy
+        : 0.0;
+
+    // Exhaust gas temperature over the cycle
+    double outflow = 0, outflowTemp = 0, portTime = 0, portTemp = 0;
+    for (size_t k = 1; k < cycle.size(); ++k) {
+        const Sample &s = *cycle[k];
+        const double dt = s.time - cycle[k - 1]->time;
+        if (s.exhaustFlow > 0) {
+            outflow += s.exhaustFlow;
+            outflowTemp += s.exhaustFlow * s.gasTemp;
+        }
+        portTime += dt;
+        portTemp += dt * s.portTemp;
+    }
+    const double zeroC = units::celcius(0.0);
+    result.exhaustTempFlowWeighted_C = (outflow > 0) ? outflowTemp / outflow - zeroC : 0.0;
+    result.exhaustPortTemp_C = (portTime > 0) ? portTemp / portTime - zeroC : 0.0;
 
     m_results.push_back(result);
 }

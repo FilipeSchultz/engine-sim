@@ -1,0 +1,133 @@
+/* Estilo da moldura (cabeçalho, lateral com abas, área de conteúdo). */
+
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+  color: #222;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- cabeçalho ---------- */
+/* Cores da marca Engine Rig Simulator (as mesmas de _sys/img/logo.svg e capa.svg):
+   azul #142448, azul claro #22386B, âmbar #F2A33A, cinza-azulado #C9D1E3 */
+.cabecalho {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  background: #142448;
+  color: #fff;
+  height: 52px;
+  padding: 0 14px 0 10px;
+  border-bottom: 3px solid #F2A33A;
+}
+.marca { display: flex; align-items: center; cursor: pointer; text-decoration: none; color: #fff; flex: 0 0 auto; }
+.marca img { width: 36px; height: 36px; display: block; }
+.marca-texto { display: flex; flex-direction: column; margin-left: 10px; line-height: 1.1; }
+.marca-nome {
+  font-family: "Bahnschrift SemiBold", "Bahnschrift", "Segoe UI", Arial, sans-serif;
+  font-size: 18px; font-weight: 600;
+  white-space: nowrap;
+}
+.marca-nome b { color: #F2A33A; font-weight: 400; }
+.marca-sub { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #C9D1E3; white-space: nowrap; }
+.cabecalho .sep { width: 1px; height: 26px; background: #22386B; margin: 0 16px; flex: 0 0 1px; }
+.cabecalho .pagina {
+  font-size: 13px; color: #c5cde0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1 1 auto;
+}
+.ferramentas { display: flex; gap: 4px; flex: 0 0 auto; }
+.ferramentas button {
+  background: #1c2f5a; color: #fff;
+  border: 1px solid #22386B; border-radius: 3px;
+  height: 28px; min-width: 32px; padding: 0 10px;
+  font: inherit; cursor: pointer;
+}
+.ferramentas button:hover { background: #22386B; }
+
+/* ---------- corpo ---------- */
+.corpo { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
+
+.lateral {
+  flex: 0 0 auto;
+  width: 290px;
+  display: flex;
+  flex-direction: column;
+  background: #eef2f7;
+  min-width: 0;
+}
+.divisor {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: #d5dbe3;
+  border-left: 1px solid #c3cbd6;
+}
+.divisor:hover { background: #a9b6c8; }
+
+.principal { flex: 1 1 auto; min-width: 0; }
+.principal iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.capa-arraste { display: none; position: absolute; left: 0; top: 0; right: 0; bottom: 0; cursor: col-resize; z-index: 10; }
+
+/* ---------- abas ---------- */
+.abas { flex: 0 0 auto; display: flex; padding: 6px 6px 0 6px; border-bottom: 1px solid #c3cbd6; }
+.aba {
+  padding: 5px 14px;
+  margin-right: 3px;
+  border: 1px solid #c3cbd6; border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  background: #dfe5ee; color: #142448;
+  cursor: pointer; font-weight: 600;
+  position: relative; top: 1px;
+}
+.aba.sel { background: #fff; }
+
+.painel { flex: 1 1 auto; overflow: auto; background: #fff; min-height: 0; position: relative; }
+
+.barra-arvore { padding: 4px 6px; border-bottom: 1px solid #e3e8ef; text-align: right; }
+.barra-arvore a { color: #142448; cursor: pointer; font-size: 11px; margin-left: 10px; }
+.barra-arvore a:hover { text-decoration: underline; }
+
+/* ---------- árvore ---------- */
+#arvore, #arvore ul { list-style: none; margin: 0; padding: 0; }
+#arvore { padding: 4px 0 20px 0; }
+#arvore ul { padding-left: 16px; }
+#arvore li.fechada > ul { display: none; }
+
+.no {
+  display: flex; align-items: center;
+  padding: 3px 6px; cursor: pointer;
+  white-space: nowrap; border-radius: 3px; margin: 0 4px;
+}
+.no:hover { background: #e8ecf5; }
+.no.ativo { background: #d5dcec; font-weight: 600; }
+.seta { width: 14px; flex: 0 0 14px; text-align: center; color: #5b6b82; font-size: 10px; }
+li.fechada > .no .seta:before { content: "\25B8"; }
+li.aberta  > .no .seta:before { content: "\25BE"; }
+.icone { width: 18px; flex: 0 0 18px; display: flex; margin-right: 4px; }
+.rotulo { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- pesquisa ---------- */
+#painelPesquisa { flex-direction: column; }
+.caixa-busca { padding: 8px; border-bottom: 1px solid #e3e8ef; }
+.caixa-busca input {
+  width: 100%; box-sizing: border-box;
+  padding: 6px 8px; font: inherit;
+  border: 1px solid #b7c2d1; border-radius: 3px;
+}
+.caixa-busca input:focus { outline: none; border-color: #142448; }
+.status { font-size: 11px; color: #667; margin-top: 5px; }
+#resultados { flex: 1 1 auto; overflow: auto; }
+.resultado { padding: 7px 10px; border-bottom: 1px solid #edf0f4; cursor: pointer; }
+.resultado:hover { background: #f2f4f9; }
+.resultado.sel { background: #d5dcec; }
+.res-titulo { font-weight: 600; color: #142448; }
+.res-caminho { font-size: 11px; color: #7a8699; }
+.res-trecho { font-size: 12px; color: #444; margin-top: 2px; line-height: 1.4; }
+.res-trecho b { background: #fff1a8; font-weight: 600; }
+
+@media print { .cabecalho, .lateral, .divisor { display: none; } }

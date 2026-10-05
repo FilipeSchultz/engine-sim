@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Limitações conhecidas</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Limitações conhecidas</h1>
+  <p class="subtitulo">O que o simulador não modela, ou modela de forma simplificada</p>
+
+  <h2>Combustão</h2>
+  <ul>
+    <li><b>Modelos de chama 0 e 1:</b> a chama é um cilindro que para de repente na camisa e no pistão (sem cauda, Pmax
+        pontudo), e a variação ciclo a ciclo vem só de <code>burning_efficiency_randomness</code> (COV ~0,1 % quando a
+        turbulência passa de <code>max_turbulence_effect</code>). O modelo 2 corrige os dois.</li>
+    <li><b>Sem modelo de detonação</b> (knock).</li>
+    <li><b>Só ignição por centelha.</b> Motores diesel são aproximados por uma "centelha" perto do PMS
+        (ver <a href="../Motores/Motores_Disponiveis.html">Motores disponíveis</a>).</li>
+  </ul>
+
+  <h2>Gás</h2>
+  <ul>
+    <li><b>Modelo de gás 0:</b> γ = 1,4 constante e sem dissociação; o gás queimado fica quente demais, o ciclo eficiente
+        demais e o torque é plano para todo λ &lt; 1. O modelo 1 corrige; nele a dissociação só está implícita no ajuste do
+        calor específico do gás queimado.</li>
+    <li>As equações de escoamento (válvulas, borboleta, dutos) mantêm γ = 1,4 e transferem energia interna sem o trabalho
+        de escoamento, como no engine-sim original.</li>
+    <li>As massas do log de indicação usam a massa molar do ar para todo o gás (como a simulação).</li>
+  </ul>
+
+  <h2>Geometria e sistemas</h2>
+  <ul>
+    <li>Pistão e cabeçote planos (sem bowl, pent-roof ou squish).</li>
+    <li>Sem turbocompressor.</li>
+    <li>Temperatura das paredes constante; sem modelo térmico do motor. O sensor de temperatura do líquido (CLT) da ECU
+        lê sempre 90 °C.</li>
+  </ul>
+
+  <h2>Tempo real</h2>
+  <ul>
+    <li>Se o PC não acompanha o tempo real (RT/dT &gt; 1 no painel de desempenho), o tempo simulado fica mais lento que o
+        relógio: rampas, timeouts e sinais CAN deixam de corresponder ao tempo da automação.</li>
+    <li>Os resultados mudam um pouco com a frequência da simulação.</li>
+  </ul>
+
+  <div class="pendente">Inclua as limitações observadas na operação do banco (comportamentos inesperados, pontos que não convergem).</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Modelagem &middot; Revisão 0.1</div>
+</body>
+</html>

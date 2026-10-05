@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Variáveis de ambiente</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script src="_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Variáveis de ambiente</h1>
+  <p class="subtitulo">Todas as variáveis lidas pelo simulador na partida</p>
+
+  <p>As funções da célula de teste virtual são configuradas por variáveis de ambiente. Elas são lidas
+     <b>uma vez, na partida</b>: defina-as no mesmo prompt (ou no <code>.bat</code>) antes de abrir o
+     <code>engine-sim-app.exe</code>. Para mudar um valor, feche e abra o simulador de novo.</p>
+
+<pre><code>set ENGINE_SIM_ECU_LOG=C:\temp\ecu.csv
+set ENGINE_SIM_INDI_UDP=127.0.0.1:5005
+Release\engine-sim-app.exe</code></pre>
+
+  <h2>CAN / dinamômetro</h2>
+  <p>Só têm efeito num executável compilado com <code>CAN_ENABLED=ON</code>.
+     Veja <a href="Comunicacao/CAN_EMCON.html">Controle CAN (AVL EMCON)</a>.</p>
+  <table>
+    <tr><th>Variável</th><th>Padrão</th><th>Função</th></tr>
+    <tr><td><code>ENGINE_SIM_CAN_CHANNEL</code></td><td>0</td><td>Canal Kvaser (0 = primeiro canal da interface)</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_BITRATE</code></td><td>500000</td><td>Taxa em bit/s: 125000, 250000, 500000 ou 1000000</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_LIFESIGNAL_TIMEOUT_MS</code></td><td>0 (desligado)</td>
+        <td>Tempo máximo sem mudança do <code>LifesignalFeedback</code> do HOST em modo remoto. Ao estourar,
+            o simulador volta para Manual com falha. O DBC especifica 100 ms.</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_SPEED_RAMP_RPM_S</code></td><td>1000</td><td>Rampa da demanda de rotação [rpm/s] (0 = degrau)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_TORQUE_RAMP_NM_S</code></td><td>2000</td><td>Rampa da demanda de torque [Nm/s] (0 = degrau)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_TORQUE_NOISE_NM</code></td><td>1.0</td><td>Ruído gaussiano da célula de carga, desvio padrão [Nm] (0 = sem ruído)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_TORQUE_FILTER_MS</code></td><td>50</td><td>Constante de tempo do filtro da medição de torque [ms] (0 = sem filtro)</td></tr>
+  </table>
+
+  <h2>ECU virtual</h2>
+  <p>Veja <a href="ECU/ECU.html">ECU virtual</a>.</p>
+  <table>
+    <tr><th>Variável</th><th>Exemplo</th><th>Função</th></tr>
+    <tr><td><code>ENGINE_SIM_ECU_LOG</code></td><td><code>C:\temp\ecu.csv</code></td>
+        <td>Datalog a 20 Hz com todas as medições da ECU, mais λ real do cilindro, AFR, pedal e torque do dinamômetro.
+            Veja <a href="ECU/Medicoes.html">Medições e datalog</a>. Com o link ligado, grava o lado do controlador de I/O
+            (estado do link, comando aplicado, valores da planta); o datalog da ECU é o <code>--log</code> do
+            <code>ecu-standalone</code>.</td></tr>
+    <tr><td><code>ENGINE_SIM_ECU_LINK</code></td><td><code>1</code></td>
+        <td>ECU externa: o motor é controlado pelo <code>ecu-standalone</code> via UDP (<code>1</code> liga, <code>0</code> desliga;
+            sobrepõe <code>set_ecu_settings(link: ...)</code>). Veja <a href="ECU/ECU_Standalone.html">ECU standalone</a>.</td></tr>
+    <tr><td><code>ENGINE_SIM_ECU_LINK_ADDRESS</code></td><td><code>127.0.0.1:5600</code></td>
+        <td>Onde o <code>ecu-standalone</code> escuta (endereço[:porta]).</td></tr>
+    <tr><td><code>ENGINE_SIM_ECU_LINK_SYNC</code></td><td><code>lockstep</code></td>
+        <td><code>lockstep</code>: o simulador espera o comando de cada amostra (mesmo resultado da ECU interna);
+            <code>free</code>: nunca espera, como numa bancada real.</td></tr>
+    <tr><td><code>ENGINE_SIM_ECU_LEARN</code></td><td><code>C:\temp\novo.dcm</code></td>
+        <td>Liga o aprendizado de mapas: grava a cada 10 s e ao fechar um DCM aprendido do comportamento do script.
+            Veja <a href="ECU/Aprendizado.html">Aprendizado de mapas</a>.</td></tr>
+  </table>
+
+  <h2>Execução sem operador</h2>
+  <p>Para rodadas por script (ensaios automáticos, comparação de resultados), sem ninguém no teclado.
+     As teclas continuam funcionando por cima destes valores.</p>
+  <table>
+    <tr><th>Variável</th><th>Exemplo</th><th>Função</th></tr>
+    <tr><td><code>ENGINE_SIM_AUTOSTART</code></td><td><code>3</code></td>
+        <td>Liga a ignição e aciona o motor de partida por este tempo [s] (<code>0</code> = só a ignição).</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_HOLD</code></td><td><code>600</code></td>
+        <td>Liga o dinamômetro mantendo esta rotação [rpm], como se faz com o CFR (motorizado até a rotação, não partido).</td></tr>
+    <tr><td><code>ENGINE_SIM_THROTTLE</code></td><td><code>1.0</code></td>
+        <td>Borboleta com nenhuma tecla de acelerador pressionada (0 a 1).</td></tr>
+  </table>
+
+<pre><code>set ENGINE_SIM_AUTOSTART=0
+set ENGINE_SIM_DYNO_HOLD=600
+set ENGINE_SIM_THROTTLE=1.0
+Release\engine-sim-app.exe</code></pre>
+
+  <h2>Indicação de combustão</h2>
+  <p>Veja <a href="Indicacao/Indicacao.html">Indicação de combustão</a>.</p>
+  <table>
+    <tr><th>Variável</th><th>Exemplo</th><th>Função</th></tr>
+    <tr><td><code>ENGINE_SIM_INDI_LOG</code></td><td><code>C:\temp\indi.csv</code></td>
+        <td>Log com uma linha por cilindro e ciclo: Pmax, IMEP, CA10/50/90, VE, massa de ar…
+            Veja <a href="Indicacao/Log_Indicacao.html">Log de indicação</a>.</td></tr>
+    <tr><td><code>ENGINE_SIM_INDI_UDP</code></td><td><code>127.0.0.1:5005</code></td>
+        <td>Destino (IPv4 host:porta) do fluxo de pressão no cilindro + ângulo do encoder, usado pelo IndiCom virtual.</td></tr>
+    <tr><td><code>ENGINE_SIM_INDI_NOISE_BAR</code></td><td><code>0.05</code></td>
+        <td>Ruído gaussiano do sensor de pressão, desvio padrão [bar]. Padrão 0.</td></tr>
+    <tr><td><code>ENGINE_SIM_INDI_OFFSET_BAR</code></td><td><code>0.5</code></td>
+        <td>Cada sensor recebe um offset fixo aleatório dentro de ±valor [bar], como um piezo sem referência.
+            O IndiCom remove com o pegging termodinâmico. Padrão 0.</td></tr>
+  </table>
+
+  <div class="dica">
+    <b>Dica:</b> o <code>tools\indicom\iniciar_com_simulador.bat</code> já define <code>ENGINE_SIM_INDI_UDP</code>
+    e abre o simulador e o IndiCom juntos. Use-o como exemplo para um <code>.bat</code> do banco.
+  </div>
+
+  <div class="aviso">
+    <b>Atenção:</b> um caminho de log que não pode ser criado (pasta inexistente, arquivo aberto no Excel)
+    não impede o simulador de abrir. Para o log de indicação aparece a mensagem <code>INDI: cannot write ...</code>
+    no painel de informações; para o datalog da ECU não aparece nada. Confira se o arquivo foi criado.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Revisão 0.1</div>
+</body>
+</html>

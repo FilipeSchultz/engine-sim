@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Dinamômetro</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Dinamômetro</h1>
+  <p class="subtitulo">Varredura de potência, rotação constante e controle de torque</p>
+
+  <p>O dinamômetro virtual está acoplado direto ao virabrequim: a rotação dele é a rotação do motor, e o torque
+     medido é o torque de frenagem que ele aplica. Há três formas de operá-lo:</p>
+
+  <table>
+    <tr><th>Modo</th><th>Como ligar</th><th>Comportamento</th></tr>
+    <tr><td><b>Varredura</b></td><td>Teclado: <b>D</b> (sem hold)</td>
+        <td>Enquanto o motor entrega torque, a rotação pedida sobe 500 rpm/s. Ao passar do
+            <code>redline</code>, o dinamômetro desliga sozinho. Serve para levantar a curva de potência a plena carga.</td></tr>
+    <tr><td><b>Rotação constante</b> (hold)</td><td>Teclado: <b>D</b> + <b>H</b>; CAN: modo Speed</td>
+        <td>Segura o motor numa rotação fixa e mede o torque. É o modo usado para pontos estacionários,
+            calibração e indicação.</td></tr>
+    <tr><td><b>Torque</b></td><td>Só pelo CAN: modo Torque</td>
+        <td>Aplica um torque de frenagem fixo; a rotação fica onde o motor equilibra.</td></tr>
+  </table>
+
+  <h2>Rotação constante pelo teclado</h2>
+  <ol>
+    <li>Com o motor funcionando, pressione <b>D</b> (luz <i>Dyno.</i> acende) e <b>H</b> (luz <i>Hold</i> acende).
+        Se <b>H</b> for pressionado com o dinamômetro desligado, a luz Hold fica fraca: o hold está em espera.</li>
+    <li>Segure <b>G</b> e gire a roda do mouse para mudar a rotação. O valor aparece no instrumento <b>DYNO. SPEED</b>.</li>
+    <li>Ajuste o acelerador (Q/W/E/R ou Espaço + roda) e leia TORQUE e POWER.</li>
+  </ol>
+  <p>Os limites e o passo vêm do script do motor:</p>
+  <table>
+    <tr><th>Parâmetro do script</th><th>Função</th></tr>
+    <tr><td><code>dyno_min_speed</code></td><td>Rotação mínima do hold pelo teclado</td></tr>
+    <tr><td><code>dyno_max_speed</code></td><td>Rotação máxima do hold pelo teclado</td></tr>
+    <tr><td><code>dyno_hold_step</code></td><td>Passo de cada clique da roda com G</td></tr>
+  </table>
+
+  <h2>Pelo CAN (automação do banco)</h2>
+  <p>Em modo remoto o HOST comanda o dinamômetro pelo protocolo AVL EMCON:</p>
+  <ul>
+    <li><code>Dyno_On_Off</code> liga e desliga; <code>Control_Mode_Command</code> escolhe Speed (0) ou Torque (1).</li>
+    <li>A demanda ativa (<code>Speed_Demand</code> ou <code>Torque_Demand</code>) segue uma rampa
+        (<code>ENGINE_SIM_DYNO_SPEED_RAMP_RPM_S</code>, padrão 1000 rpm/s; <code>ENGINE_SIM_DYNO_TORQUE_RAMP_NM_S</code>, padrão 2000 Nm/s).</li>
+    <li>A demanda inativa acompanha o ponto de operação atual, então trocar de modo ou ligar o dinamômetro não dá degrau.</li>
+    <li>Os limites do script não valem no CAN: o HOST define a faixa. O simulador só rejeita rotações acima de 1,2 × <code>redline</code>.</li>
+    <li>O torque enviado ao HOST (<code>Dyno_Torque</code>) passa por um modelo de célula de carga: ruído gaussiano
+        (<code>ENGINE_SIM_DYNO_TORQUE_NOISE_NM</code>, padrão 1 Nm, presente mesmo com o dinamômetro desligado)
+        e filtro de primeira ordem (<code>ENGINE_SIM_DYNO_TORQUE_FILTER_MS</code>, padrão 50 ms).</li>
+  </ul>
+  <p>Veja <a href="../Comunicacao/CAN_EMCON.html">Controle CAN (AVL EMCON)</a>.</p>
+
+  <div class="perigo">
+    <b>Segurança:</b> ao sair do modo remoto (comando do HOST, falha ou timeout do lifesignal) o simulador
+    zera o acelerador, desliga o motor de partida, desliga o dinamômetro e o hold, e zera a rotação pedida antes
+    de devolver o controle ao teclado.
+  </div>
+
+  <div class="dica">
+    <b>Dica:</b> para pontos de indicação, segure a rotação, espere a pressão do coletor estabilizar
+    (cerca de 1 s na rotação mais baixa) e faça a média de pelo menos 40 ciclos.
+  </div>
+
+  <div class="pendente">Descreva o modo <code>Torque_Mode</code> (Te / Td) do EMCON: hoje o simulador só ecoa o valor recebido
+    em <code>Torque_Mode_State</code>, sem diferença de comportamento.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Operação &middot; Revisão 0.1</div>
+</body>
+</html>

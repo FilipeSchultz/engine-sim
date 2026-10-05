@@ -150,6 +150,9 @@ public node ls_v8 {
         starter_speed: 200 * units.rpm,
         redline: 6500 * units.rpm,
         throttle_gamma: 2.0,
+        // Port injectors (datasets/gm_ls.dcm: InjectorFlow, InjectorDeadTime)
+        injector_flow: 630.0,
+        injector_dead_time: 1.0,
         fuel: fuel(
             //max_turbulence_effect: 10.0,
             //max_dilution_effect: 20.0,R

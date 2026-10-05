@@ -25,6 +25,9 @@
 #include "can_interface.h"
 #include "avl_emcon.h"
 #include "ecu/ecu.h"
+#include "ecu/host.h"
+#include "ecu_hardware.h"
+#include "ecu_learner.h"
 #include "indicating_system.h"
 #include "udp_sender.h"
 
@@ -104,14 +107,17 @@ class EngineSimApplication {
         void refreshUserInterface();
 
         void initializeEcu();
+        void initializeAutostart();
         void updateEcu(double dt);
         void initializeIndicating();
         void attachIndicating();
         void updateIndicating(double dt);
         void sendIndicatingData();
         void sendIndicatingInfo();
-        void reloadCalibration();
         void saveLearnedCalibration();
+        void initializeXcp();
+        bool initializeEcuLink();
+        void onEcuSettings(const EcuScriptSettings &settings);
 
         void openCan();
         void updateCanReceive(double dt);
@@ -120,20 +126,23 @@ class EngineSimApplication {
         bool isCanRemote() const { return m_canRemote; }
 
     protected:
-        // Virtual ECU and its calibration file (reloaded whenever it is saved)
+        // Virtual ECU; the host keeps its calibration file (reloaded whenever
+        // it is saved), XCP server and datalog
         ecu::Ecu m_ecu;
-        std::string m_calibrationPath;
-        std::filesystem::file_time_type m_calibrationFileTime;
-        double m_calibrationCheckTimer = 0.0;
+        ecu::EcuHost m_ecuHost;
+        EcuHardware m_ecuHardware;
+        EcuLearner m_ecuLearner;
+        EcuScriptSettings m_ecuScriptSettings;
+        EcuHardware::LinkState m_ecuLinkState = EcuHardware::LinkState::Off;
+        std::ofstream m_ecuLinkLog;
+        double m_ecuLinkLogTime = 0.0;
+        double m_ecuLinkLogTimer = 0.0;
+        bool m_ecuSettingsLoaded = false;
 
         // Optional: learned dataset output (ENGINE_SIM_ECU_LEARN) and CSV
         // datalog (ENGINE_SIM_ECU_LOG)
         std::string m_ecuLearnPath;
         double m_ecuLearnSaveTimer = 0.0;
-        std::ofstream m_ecuLog;
-        double m_ecuLogTimer = 0.0;
-        double m_ecuLogTime = 0.0;
-        int m_ecuLogLines = 0;
 
         // Combustion analysis per cycle (ENGINE_SIM_INDI_LOG) and raw cylinder
         // pressure stream for the external indicating tool (ENGINE_SIM_INDI_UDP)
@@ -223,6 +232,12 @@ class EngineSimApplication {
         Transmission *m_transmission;
         Simulator *m_simulator;
         double m_dynoSpeed;
+
+        // Unattended start (ENGINE_SIM_AUTOSTART): starter time left [s]
+        double m_autostartTimer = 0.0;
+        bool m_autostartIgnition = false;
+        double m_autostartDynoSpeed = 0.0;
+        double m_restingThrottle = 0.0;         // with no throttle key pressed
         double m_torque;
 
         UiManager m_uiManager;

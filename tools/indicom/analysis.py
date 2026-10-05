@@ -9,6 +9,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# Common crank angle grid for display, averaging and overlays (each cycle's raw
+# samples fall at slightly different angles)
+DISPLAY_GRID = np.arange(-360.0, 360.0, 0.25)
+
 
 @dataclass
 class Geometry:
@@ -164,3 +168,30 @@ def analyze_cycle(cylinder: int, theta: np.ndarray, pressure_bar: np.ndarray,
     full_rate[window] = heat_rate
 
     return result, CycleCurves(theta, p_bar, volume, full_mfb, full_rate)
+
+
+def resample(curves: CycleCurves, grid: np.ndarray = DISPLAY_GRID) -> CycleCurves:
+    """Cycle curves on the common display grid."""
+    def window(values):
+        out = np.full_like(grid, np.nan)
+        valid = ~np.isnan(values)
+        if valid.any():
+            t = curves.theta[valid]
+            inside = (grid >= t[0]) & (grid <= t[-1])
+            out[inside] = np.interp(grid[inside], t, values[valid])
+        return out
+
+    return CycleCurves(
+        grid,
+        np.interp(grid, curves.theta, curves.pressure),
+        np.interp(grid, curves.theta, curves.volume),
+        window(curves.mfb),
+        window(curves.heat_rate))
+
+
+def mean_cycle(cylinder: int, pressures: np.ndarray, geometry: Geometry, settings: Settings):
+    """Ensemble average of pegged pressure traces on DISPLAY_GRID (one row per
+    cycle) and its analysis, as the "mean cycle" of an indicating system."""
+    mean = pressures.mean(axis=0)
+    unpegged = Settings(gamma=settings.gamma, pegging="none")
+    return analyze_cycle(cylinder, DISPLAY_GRID, mean, geometry, unpegged)

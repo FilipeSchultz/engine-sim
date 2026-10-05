@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Modelagem física</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Modelagem física</h1>
+  <p class="subtitulo">Visão geral dos modelos adicionados ao engine-sim para uso como célula de teste</p>
+
+  <p>O engine-sim original simula o motor como um conjunto de volumes de gás (admissão, dutos, cilindros, escape)
+     ligados por restrições de vazão, com mecânica de corpos rígidos para virabrequim, bielas e pistões. Ele foi feito
+     para som: o gás tem γ = 1,4 constante, a parede é quase adiabática e a chama é um cilindro que cresce até a camisa.
+     Com isso a combustão fica quente e eficiente demais, e o torque não depende da mistura no lado rico.</p>
+
+  <p>Este fork acrescenta modelos que se ligam pelo script do motor:</p>
+  <table>
+    <tr><th>Modelo</th><th>Entrada</th><th>O que corrige</th></tr>
+    <tr><td><a href="Modelo_Gas.html">Modelo de gás 1</a></td><td><code>gas_model: 1</code></td>
+        <td>Calor específico variável com temperatura e composição, oxidação parcial em mistura rica,
+            não uniformidade da mistura, evaporação do combustível</td></tr>
+    <tr><td><a href="Transferencia_Calor.html">Transferência de calor</a></td><td><code>wall_heat_transfer</code>, <code>wall_temperature</code></td>
+        <td>Perda de calor para as paredes pela correlação de Hohenberg</td></tr>
+    <tr><td><a href="Modelos_Chama.html">Modelo de chama 1</a></td><td><code>flame_model: 1</code></td>
+        <td>Velocidade laminar com riqueza, temperatura e pressão do gás não queimado e gás residual, atualizada a cada passo</td></tr>
+    <tr><td><a href="Modelos_Chama.html">Modelo de chama 2</a></td><td><code>flame_model: 2</code></td>
+        <td>Chama esférica com entranhamento e queima (quase-dimensional), cauda de combustão e variação ciclo a ciclo</td></tr>
+    <tr><td>Temperatura do ar</td><td><code>air_temperature</code> em <code>intake(...)</code></td><td>Ar condicionado da célula</td></tr>
+    <tr><td>Indicação</td><td>variáveis <code>ENGINE_SIM_INDI_*</code></td>
+        <td>Análise por ciclo e fluxo de pressão no cilindro (ver <a href="../Indicacao/Indicacao.html">Indicação</a>)</td></tr>
+  </table>
+
+  <div class="dica">
+    <b>Recomendação:</b> para resultados de combustão use <code>gas_model: 1</code>, <code>flame_model: 2</code> e
+    <code>wall_heat_transfer: 1.0</code> juntos. Os modelos foram calibrados nessa combinação (ver <a href="../Motores/Motor_CFR.html">Motor CFR</a>).
+  </div>
+
+  <p>As limitações que continuam valendo estão em <a href="Limitacoes.html">Limitações conhecidas</a>.</p>
+
+  <div class="pendente">Inclua um diagrama do motor como rede de volumes de gás (admissão → plenum → dutos → cilindro → escape)
+    com os pontos onde cada modelo atua.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Modelagem &middot; Revisão 0.1</div>
+</body>
+</html>

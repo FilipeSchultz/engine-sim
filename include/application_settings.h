@@ -23,4 +23,20 @@ struct ApplicationSettings {
     int colorGreen = 0xBDD869;
 };
 
+// Virtual ECU settings from the script (set_ecu_settings)
+struct EcuScriptSettings {
+    bool defined = false;           // set_ecu_settings was called
+    bool xcp = false;               // XCP on Ethernet server
+    std::string xcpAddress = "0.0.0.0";
+    int xcpPort = 5555;
+    std::string xcpClock = "sim";   // "sim" or "real"
+
+    // External ECU (ecu-standalone) over UDP instead of the ECU in the
+    // simulator
+    bool link = false;
+    std::string linkAddress = "127.0.0.1";
+    int linkPort = 5600;
+    std::string linkSync = "lockstep";  // "lockstep" or "free"
+};
+
 #endif /* ATG_ENGINE_SIM_APPLICATION_SETTINGS_H */

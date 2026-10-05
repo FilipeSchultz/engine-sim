@@ -1,0 +1,141 @@
+{
+  "version": 9,
+  "measurementSetup": {
+    "sources": [
+      {
+        "baseNode": {
+          "identifier": "df8e4191-2d9f-4b39-99fd-f69d97030ef3",
+          "name": "CAN 1",
+          "description": [
+            "Kvaser Virtual CAN Driver - 0",
+            "1: CAN - 500 kbit/s, 75%"
+          ],
+          "readOnlyProperties": false,
+          "readOnlyConnections": false,
+          "disabled": false
+        },
+        "isDataGenerator": false,
+        "channelSettings": {
+          "channelNumber": 1,
+          "lockedToSerialNumber": false,
+          "deviceProductCode": "00-00000-00000-0",
+          "deviceSerialNumber": "0",
+          "channelNumberOnDevice": 1,
+          "deviceCardType": 1,
+          "deviceCardNumber": 0,
+          "canConfiguration": {
+            "canMode": 1,
+            "accessMode": 1,
+            "silentMode": false,
+            "busParamsBitRate": 500000,
+            "busParams": {
+              "tq": 8,
+              "phase1": 2,
+              "phase2": 2,
+              "sjw": 2,
+              "prop": 3,
+              "prescaler": 4
+            },
+            "busParamsBitRateFd": 4000000,
+            "busParamsFd": {
+              "tq": 10,
+              "phase1": 7,
+              "phase2": 2,
+              "sjw": 2,
+              "prop": 0,
+              "prescaler": 2
+            },
+            "busParamsSamplePoint": 75,
+            "canConfigModes": []
+          },
+          "protocols": [
+            "CAN",
+            "CAN FD"
+          ]
+        }
+      }
+    ],
+    "dataProcessors": [
+      {
+        "baseNode": {
+          "identifier": "8bb8300c-26b5-4e18-99b1-d4f843813ffa",
+          "name": "Databases 1",
+          "description": [
+            "AVL_Dyno_EMCON_v2.7.dbc"
+          ],
+          "readOnlyProperties": false,
+          "readOnlyConnections": false,
+          "disabled": false
+        },
+        "connectedNodes": [
+          "df8e4191-2d9f-4b39-99fd-f69d97030ef3"
+        ],
+        "databasesSettings": {
+          "databaseFiles": [
+            "C:\\Github\\engine-sim\\AVL_Dyno_EMCON_v2.7.dbc"
+          ]
+        }
+      }
+    ],
+    "targets": [
+      {
+        "baseNode": {
+          "identifier": "2EE6667D-2C84-4BEB-822C-7494CC93B08E",
+          "name": "UI Streams",
+          "description": [
+            "Streams data and status to the user interface"
+          ],
+          "readOnlyProperties": true,
+          "readOnlyConnections": false,
+          "disabled": false
+        },
+        "connectedNodes": [
+          "8bb8300c-26b5-4e18-99b1-d4f843813ffa"
+        ]
+      },
+      {
+        "baseNode": {
+          "identifier": "df8e4191-2d9f-4b39-99fd-f69d97030ef3",
+          "name": "CAN 1 - Out",
+          "description": [
+            "Kvaser Virtual CAN Driver - 0",
+            "1: CAN - 500 kbit/s, 75%"
+          ],
+          "readOnlyProperties": true,
+          "readOnlyConnections": true,
+          "disabled": false
+        },
+        "connectedNodes": []
+      }
+    ],
+    "language": "en"
+  },
+  "workspaces": [
+    {
+      "id": 1,
+      "title": "Workspace 1",
+      "workspacePaneId": 1
+    }
+  ],
+  "workspacePanes": [
+    {
+      "id": 1,
+      "containerData": {
+        "vertical": false,
+        "paneDataIds": [
+          2
+        ],
+        "paneRatios": [
+          1
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "componentData": {
+        "componentId": "",
+        "componentPropSlices": {}
+      }
+    }
+  ]
+}

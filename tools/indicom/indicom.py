@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from acquisition import Acquisition
-from analysis import Geometry, Settings
+from analysis import Geometry, Settings, mean_cycle
 
 ENGINES_DIR = Path(__file__).parent / "engines"
 DEFAULT_PORT = 5005
@@ -36,9 +36,24 @@ RESULT_COLUMNS = [
     ("CA90 [°]", "ca90", 1),
     ("Duração 10-90 [°]", "burn_duration", 1),
     ("COV IMEP [%]", None, 2),
+    ("COV Pmax [%]", None, 1),
+    ("σ CA50 [°]", None, 1),
     ("Falhas", None, 0),
     ("Ciclos", None, 0),
 ]
+
+# Display of the pressure / heat release curves
+DISPLAY_MEAN = 0            # ensemble average of the last N cycles
+DISPLAY_ENVELOPE = 1        # average + min / max band
+DISPLAY_OVERLAY = 2         # average + the last cycles in thin lines
+DISPLAY_SINGLE = 3          # last cycle only
+DISPLAY_MODES = [
+    "Ciclo médio",
+    "Ciclo médio + envelope mín/máx",
+    "Ciclo médio + ciclos sobrepostos",
+    "Último ciclo",
+]
+OVERLAY_CYCLES = 20
 
 
 def spin(minimum, maximum, value, decimals=1, step=1.0, suffix=""):
@@ -60,7 +75,8 @@ class IndiComWindow(QMainWindow):
         self.acquisition = None
         self.cylinders = 0
         self.history = {}       # cylinder -> deque of CycleResult
-        self.curves = {}        # cylinder -> last CycleCurves
+        self.curves = {}        # cylinder -> deque of CycleCurves (display grid)
+        self.dirty = set()      # cylinders with new cycles since the last plot update
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_config_panel())
@@ -135,10 +151,14 @@ class IndiComWindow(QMainWindow):
         self.average_cycles = QSpinBox()
         self.average_cycles.setRange(1, 1000)
         self.average_cycles.setValue(50)
+        self.display_mode = QComboBox()
+        self.display_mode.addItems(DISPLAY_MODES)
+        self.display_mode.setCurrentIndex(DISPLAY_ENVELOPE)
         form.addRow("γ (liberação de calor)", self.gamma)
         form.addRow("Pegging", self.pegging)
         form.addRow("Expoente politrópico", self.polytropic)
         form.addRow("Ciclos na média", self.average_cycles)
+        form.addRow("Exibição", self.display_mode)
         layout.addWidget(analysis)
 
         buttons = QHBoxLayout()
@@ -157,6 +177,7 @@ class IndiComWindow(QMainWindow):
             widget.valueChanged.connect(self._apply_configuration)
         self.pegging.currentIndexChanged.connect(self._apply_configuration)
         self.average_cycles.valueChanged.connect(self._resize_history)
+        self.display_mode.currentIndexChanged.connect(self._redraw)
 
         panel.setMinimumWidth(330)
         return panel
@@ -194,6 +215,19 @@ class IndiComWindow(QMainWindow):
         self.heat_plot.showGrid(x=True, y=True, alpha=0.3)
         self.heat_plot.setXLink(self.mfb_plot)
         tabs.addTab(burn, "Queima")
+
+        # Cycle-based results, as the trend view of an indicating system
+        trend = pg.GraphicsLayoutWidget()
+        self.trend_plots = []
+        for row, label in enumerate(("Pmax [bar]", "IMEP líq. [bar]", "CA50 [°]")):
+            plot = trend.addPlot(row=row, col=0)
+            plot.setLabel("left", label)
+            plot.showGrid(x=True, y=True, alpha=0.3)
+            if self.trend_plots:
+                plot.setXLink(self.trend_plots[0])
+            self.trend_plots.append(plot)
+        self.trend_plots[-1].setLabel("bottom", "Ciclo (os mais recentes à direita)")
+        tabs.addTab(trend, "Ciclo a ciclo")
 
         area.addWidget(tabs)
 
@@ -255,16 +289,19 @@ class IndiComWindow(QMainWindow):
         self.tdc_table.blockSignals(False)
 
         self.cylinders = count
-        self.history = {i: deque(maxlen=self.average_cycles.value()) for i in range(1, count + 1)}
-        self.curves = {}
+        size = self.average_cycles.value()
+        self.history = {i: deque(maxlen=size) for i in range(1, count + 1)}
+        self.curves = {i: deque(maxlen=size) for i in range(1, count + 1)}
         self.table.setRowCount(count + 1)
         self.table.setVerticalHeaderLabels([f"Cil. {i + 1}" for i in range(count)] + ["Média"])
         self._create_plot_items()
         self._apply_configuration()
 
     def _create_plot_items(self):
-        """One persistent curve per cylinder and plot, updated with setData()."""
-        for plot in (self.p_theta, self.p_v, self.mfb_plot, self.heat_plot):
+        """Persistent items per cylinder and plot, updated with setData():
+        main curve (mean or last cycle), min/max envelope, overlaid cycles and
+        the cycle-based trends."""
+        for plot in (self.p_theta, self.p_v, self.mfb_plot, self.heat_plot, *self.trend_plots):
             plot.clear()
         legend = self.p_theta.getPlotItem().legend
         if legend is not None:
@@ -272,27 +309,54 @@ class IndiComWindow(QMainWindow):
 
         self.plot_items = {}
         for cylinder in range(1, self.cylinders + 1):
-            pen = pg.mkPen(pg.intColor(cylinder - 1, hues=max(self.cylinders, 1)), width=1.5)
-            self.plot_items[cylinder] = (
-                self.p_theta.plot([], [], pen=pen, name=f"Cil. {cylinder}"),
-                self.p_v.plot([], [], pen=pen),
-                self.mfb_plot.plot([], [], pen=pen),
-                self.heat_plot.plot([], [], pen=pen),
-            )
+            color = pg.intColor(cylinder - 1, hues=max(self.cylinders, 1))
+            pen = pg.mkPen(color, width=2)
+            faint = pg.mkColor(color)
+            faint.setAlpha(70)
+            band = pg.mkColor(color)
+            band.setAlpha(70)
+            edge = pg.mkPen(band, width=1)
+
+            items = {
+                "main": (
+                    self.p_theta.plot([], [], pen=pen, name=f"Cil. {cylinder}"),
+                    self.p_v.plot([], [], pen=pen),
+                    self.mfb_plot.plot([], [], pen=pen),
+                    self.heat_plot.plot([], [], pen=pen),
+                ),
+                "overlay_p": [self.p_theta.plot([], [], pen=pg.mkPen(faint, width=1)) for _ in range(OVERLAY_CYCLES)],
+                "overlay_q": [self.heat_plot.plot([], [], pen=pg.mkPen(faint, width=1)) for _ in range(OVERLAY_CYCLES)],
+                "trend": [plot.plot([], [], pen=pg.mkPen(color, width=1), symbol="o", symbolSize=4,
+                                    symbolBrush=color, symbolPen=None) for plot in self.trend_plots],
+            }
+            for plot, key in ((self.p_theta, "env_p"), (self.heat_plot, "env_q")):
+                low = plot.plot([], [], pen=edge)
+                high = plot.plot([], [], pen=edge)
+                fill = pg.FillBetweenItem(low, high, brush=pg.mkBrush(band))
+                plot.addItem(fill)
+                items[key] = (low, high, fill)
+
+            for item in items["main"]:
+                item.setZValue(10)
+            self.plot_items[cylinder] = items
+        self.dirty = set(self.plot_items)
 
     def _apply_configuration(self, *_):
         if self.acquisition is not None:
             self.acquisition.configure(
                 self._geometry(), self._settings(), self._tdc_values(), self._active_cylinders())
-        for history in self.history.values():
+        # Results and curves computed with the old settings are no longer valid
+        for history in (*self.history.values(), *self.curves.values()):
             history.clear()
-        active = self._active_cylinders()
-        for cylinder in list(self.curves):
-            if cylinder - 1 >= len(active) or not active[cylinder - 1]:
-                del self.curves[cylinder]
+        self._redraw()
 
     def _resize_history(self, size):
         self.history = {c: deque(h, maxlen=size) for c, h in self.history.items()}
+        self.curves = {c: deque(h, maxlen=size) for c, h in self.curves.items()}
+        self._redraw()
+
+    def _redraw(self, *_):
+        self.dirty = set(getattr(self, "plot_items", {}))
 
     def _load_from_simulator(self):
         info = self.acquisition.info if self.acquisition else None
@@ -367,7 +431,8 @@ class IndiComWindow(QMainWindow):
                 break
             if result.cylinder in self.history:
                 self.history[result.cylinder].append(result)
-                self.curves[result.cylinder] = curves
+                self.curves[result.cylinder].append(curves)
+                self.dirty.add(result.cylinder)
 
         info = self.acquisition.info
         status = self.acquisition.status
@@ -386,20 +451,66 @@ class IndiComWindow(QMainWindow):
         self._update_table()
 
     def _update_plots(self):
-        for cylinder, (p_theta, p_v, mfb, heat) in getattr(self, "plot_items", {}).items():
-            curves = self.curves.get(cylinder)
-            if curves is None:
-                for item in (p_theta, p_v, mfb, heat):
-                    item.setData([], [])
+        """Only cylinders with new cycles (or after a display change) are redrawn."""
+        items_by_cylinder = getattr(self, "plot_items", {})
+        mode = self.display_mode.currentIndex()
+        for cylinder in list(self.dirty):
+            items = items_by_cylinder.get(cylinder)
+            if items is None:
                 continue
+            self._update_cylinder_plots(cylinder, items, list(self.curves.get(cylinder, [])), mode)
+            self._update_trends(items, list(self.history.get(cylinder, [])))
+        self.dirty.clear()
 
-            p_theta.setData(curves.theta, curves.pressure)
-            positive = curves.pressure > 0
-            p_v.setData(curves.volume[positive] * 1e6, curves.pressure[positive])
-            valid = ~np.isnan(curves.mfb)
-            mfb.setData(curves.theta[valid], curves.mfb[valid])
-            valid = ~np.isnan(curves.heat_rate)
-            heat.setData(curves.theta[valid], curves.heat_rate[valid])
+    def _update_cylinder_plots(self, cylinder, items, cycles, mode):
+        p_theta, p_v, mfb, heat = items["main"]
+        overlay_p, overlay_q = items["overlay_p"], items["overlay_q"]
+        env_p, env_q = items["env_p"], items["env_q"]
+
+        def clear_extra():
+            for item in (*overlay_p, *overlay_q, *env_p[:2], *env_q[:2]):
+                item.setData([], [])
+
+        if not cycles:
+            for item in (p_theta, p_v, mfb, heat):
+                item.setData([], [])
+            clear_extra()
+            return
+
+        if mode == DISPLAY_SINGLE:
+            shown = cycles[-1]
+        else:
+            pressures = np.array([c.pressure for c in cycles])
+            _, shown = mean_cycle(cylinder, pressures, self._geometry(), self._settings())
+
+        theta = shown.theta
+        p_theta.setData(theta, shown.pressure)
+        positive = shown.pressure > 0
+        p_v.setData(shown.volume[positive] * 1e6, shown.pressure[positive])
+        valid = ~np.isnan(shown.mfb)
+        mfb.setData(theta[valid], shown.mfb[valid])
+        valid = ~np.isnan(shown.heat_rate)
+        heat.setData(theta[valid], shown.heat_rate[valid])
+
+        clear_extra()
+        if mode == DISPLAY_ENVELOPE and len(cycles) > 1:
+            env_p[0].setData(theta, pressures.min(axis=0))
+            env_p[1].setData(theta, pressures.max(axis=0))
+            rates = np.array([c.heat_rate for c in cycles])
+            valid = ~np.isnan(rates).any(axis=0)
+            env_q[0].setData(theta[valid], rates[:, valid].min(axis=0))
+            env_q[1].setData(theta[valid], rates[:, valid].max(axis=0))
+        elif mode == DISPLAY_OVERLAY:
+            for item_p, item_q, cycle in zip(overlay_p, overlay_q, cycles[-OVERLAY_CYCLES:]):
+                item_p.setData(cycle.theta, cycle.pressure)
+                valid = ~np.isnan(cycle.heat_rate)
+                item_q.setData(cycle.theta[valid], cycle.heat_rate[valid])
+
+    @staticmethod
+    def _update_trends(items, results):
+        x = np.arange(len(results)) - len(results) + 1
+        for item, attribute in zip(items["trend"], ("pmax_bar", "imep_net_bar", "ca50")):
+            item.setData(x, np.array([getattr(r, attribute) for r in results], dtype=float))
 
     def _update_table(self):
         rows = []
@@ -430,9 +541,13 @@ class IndiComWindow(QMainWindow):
             data = [d for d in data if not math.isnan(d)]
             values.append(float(np.mean(data)) if data else None)
 
-        imep = [r.imep_net_bar for r in results]
-        cov = float(np.std(imep) / np.mean(imep) * 100) if len(imep) > 1 and np.mean(imep) > 0 else None
-        values.append(cov)
+        def cov(data):
+            return float(np.std(data) / np.mean(data) * 100) if len(data) > 1 and np.mean(data) > 0 else None
+
+        values.append(cov([r.imep_net_bar for r in results]))
+        values.append(cov([r.pmax_bar for r in fired]))
+        ca50 = [r.ca50 for r in fired if not math.isnan(r.ca50)]
+        values.append(float(np.std(ca50)) if len(ca50) > 1 else None)
         values.append(float(len(results) - len(fired)))
         values.append(float(len(results)))
         return values

@@ -112,11 +112,49 @@ public node cfr_f1 {
         dyno_min_speed: 300 * units.rpm,
         dyno_max_speed: 1200 * units.rpm,
         dyno_hold_step: 50 * units.rpm,
+        // Port injector (datasets/cfr.dcm: InjectorFlow, InjectorDeadTime)
+        injector_flow: 400.0,
+        injector_dead_time: 1.0,
         fuel: fuel(
-            max_burning_efficiency: 1.0
+            name: "PRF / iso-octane",
+            // Lower heating value of iso-octane (n-heptane: 44.6)
+            energy_density: 44.3 * units.kJ / units.g,
+            max_burning_efficiency: 1.0,
+            // Research engine: low cycle-to-cycle variation (COV of IMEP of a
+            // few %), unlike the rough-running default of the other engines
+            burning_efficiency_randomness: 0.05,
+            // Turbulence above which the charge burns completely: the CFR
+            // swirl gives ~1.4 m/s at 600 rpm (default 2.0 would leave ~13%
+            // of the fuel unburned)
+            max_turbulence_effect: 1.2,
+            // Carburettor: part of the fuel evaporates from the manifold walls,
+            // so about half of iso-octane's 308 kJ/kg cools the air
+            latent_heat: 150 * units.kJ / units.kg
         ),
         // Spreads the pedal over the useful throttle range
         throttle_gamma: 2.0,
+        // The shrouded intake valve creates swirl. Calibrated with flame_model 2
+        // and gas_model 1 against Argonne's RON pressure traces (SAE
+        // 2018-01-0187: CR 7.55, lambda 0.89, spark 5 deg ATDC: Pmax 26 bar at
+        // 37 deg ATDC; model 25.7 bar at 36.6 deg)
+        turbulence_ratio: 1.4,
+        // Spherical flame with entrainment and burn-up; the flame speed
+        // follows the unburned gas state, mixture and residual gas
+        flame_model: 2,
+        // Off-centre spark plug (side of the CFR chamber); with the flat
+        // chamber of the model, 0.5 gives a 10-90 % burn of ~27 deg
+        spark_plug_offset: 0.5,
+        // COV of IMEP ~2-3 %
+        cycle_variation: 0.2,
+        // Heat capacities varying with temperature and composition, rich
+        // mixture chemistry, carburettor mixture non-uniformity
+        gas_model: 1,
+        mixture_nonuniformity: 0.1,
+        // Heat loss to the cylinder walls: Hohenberg as published. Mean
+        // surface temperature from Argonne's estimates at RON conditions
+        // (liner 157 C, head 252 C, piston 212 C)
+        wall_heat_transfer: 1.0,
+        wall_temperature: (200.0 + 273.15) * units.K,
         hf_gain: 0.003,
         noise: 0.3,
         jitter: 0.3,
@@ -185,7 +223,9 @@ public node cfr_f1 {
         runner_length: 16.0 * units.inch,
         idle_flow_rate: k_carb(0.0),
         idle_throttle_plate_position: 0.99,
-        velocity_decay: 0.5
+        velocity_decay: 0.5,
+        // ASTM D2699 (RON): intake air held at 52 C
+        air_temperature: (52.0 + 273.15) * units.K
     )
 
     exhaust_system_parameters es_params(
@@ -286,4 +326,7 @@ public node main {
     set_engine(cfr_f1())
     set_vehicle(cfr_vehicle())
     set_transmission(cfr_transmission())
+
+    // Virtual ECU: XCP on Ethernet for ATI VISION (UDP 5555)
+    set_ecu_settings(xcp: true)
 }

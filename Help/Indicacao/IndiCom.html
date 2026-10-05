@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>IndiCom virtual</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>IndiCom virtual</h1>
+  <p class="subtitulo">Ferramenta de análise de combustão no estilo AVL IndiCom / Kistler KiBox</p>
+
+  <table class="ficha">
+    <tr><td>Pasta</td><td><code>tools\indicom\</code></td></tr>
+    <tr><td>Programa</td><td><code>indicom.py</code> (Python 3.12, PyQt6, pyqtgraph, numpy)</td></tr>
+    <tr><td>Entrada</td><td>Fluxo UDP do simulador, porta padrão 5005</td></tr>
+  </table>
+
+  <!-- <img class="tela" src="../img/IndiCom.png" alt="IndiCom virtual"> -->
+  <div class="pendente">Inclua um print da janela do IndiCom (<code>img/IndiCom.png</code>) com as áreas numeradas.</div>
+
+  <h2>Instalação (uma vez)</h2>
+<pre><code>cd tools\indicom
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt</code></pre>
+
+  <h2>Executar</h2>
+  <p>Dê dois cliques em <code>iniciar_com_simulador.bat</code>: ele define <code>ENGINE_SIM_INDI_UDP=127.0.0.1:5005</code>,
+     abre o simulador (<code>build\Release\engine-sim-app.exe</code>) e o IndiCom. Ou, manualmente:</p>
+<pre><code>set ENGINE_SIM_INDI_UDP=127.0.0.1:5005
+cd build &amp;&amp; Release\engine-sim-app.exe
+tools\indicom\.venv\Scripts\python tools\indicom\indicom.py</code></pre>
+
+  <h2>Configuração na janela</h2>
+  <table>
+    <tr><th>Grupo</th><th>Campo</th><th>Função</th></tr>
+    <tr><td rowspan="3"><b>Aquisição (UDP)</b></td><td>Porta</td><td>Porta UDP de escuta (padrão 5005)</td></tr>
+    <tr><td>Reconectar</td><td>Reabre a porta</td></tr>
+    <tr><td>Motor no simulador</td><td>Nome do motor informado pelo simulador</td></tr>
+    <tr><td rowspan="2"><b>Geometria do motor</b></td><td>Diâmetro, Curso, Biela, Taxa de compressão</td><td>Usados no cálculo do volume</td></tr>
+    <tr><td>Carregar do simulador / Salvar… / Abrir…</td>
+        <td>Preenche geometria e PMS com o que o simulador informa, ou salva / abre a configuração em JSON (<code>engines\</code>)</td></tr>
+    <tr><td><b>Cilindros</b></td><td>Analisar, PMS [°] (Todos / Nenhum)</td>
+        <td>Cilindros incluídos na análise e ângulo do encoder no PMS de combustão de cada um</td></tr>
+    <tr><td rowspan="5"><b>Análise</b></td><td>γ (liberação de calor)</td><td>Padrão 1,33</td></tr>
+    <tr><td>Pegging</td><td>Termodinâmico (politrópico) ou Nenhum (pressão absoluta)</td></tr>
+    <tr><td>Expoente politrópico</td><td>Usado no pegging (padrão 1,32)</td></tr>
+    <tr><td>Ciclos na média</td><td>N ciclos para a média e as estatísticas (padrão 50)</td></tr>
+    <tr><td>Exibição</td><td>Modo das curvas (ver abaixo)</td></tr>
+  </table>
+  <p>Num banco real, a geometria vem dos desenhos do motor e o PMS de um sensor de PMS. Aqui o botão
+     <b>Carregar do simulador</b> preenche tudo a partir do pacote de informações do simulador.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> a geometria importa como num banco real: 1° de erro no PMS muda o IMEP em alguns %, e uma taxa de
+    compressão errada distorce a liberação de calor.
+  </div>
+
+  <h2>O que é calculado (por ciclo e cilindro)</h2>
+  <table>
+    <tr><th>Resultado</th><th>Como</th></tr>
+    <tr><td>Volume</td><td>Biela-manivela a partir de diâmetro, curso, biela e taxa de compressão</td></tr>
+    <tr><td>Pegging</td><td>Termodinâmico: compressão politrópica entre −100° e −65° (ou nenhum)</td></tr>
+    <tr><td>Pmax, ângulo do Pmax</td><td>Dentro de ±180° do PMS de combustão</td></tr>
+    <tr><td>IMEP líquido / bruto</td><td>∮p dV em 720° / em ±180°, dividido pela cilindrada</td></tr>
+    <tr><td>Liberação de calor, MFB</td><td>dQ = γ/(γ−1)·p·dV + 1/(γ−1)·V·dp, normalizada do mínimo ao máximo</td></tr>
+    <tr><td>CA10 / CA50 / CA90</td><td>Ângulos de 10 / 50 / 90 % de fração mássica queimada</td></tr>
+    <tr><td>COV IMEP, COV Pmax</td><td>Desvio padrão / média nos ciclos da média</td></tr>
+    <tr><td>σ CA50</td><td>Desvio padrão do CA50 nos ciclos da média</td></tr>
+    <tr><td>Falhas</td><td>Ciclos com liberação de calor ≤ 1 J (falha de combustão)</td></tr>
+  </table>
+  <p>Ângulos em graus depois do PMS de combustão (negativo = antes). A tabela mostra a média dos últimos N ciclos, uma linha
+     por cilindro e a linha "Média".</p>
+
+  <h2>Gráficos</h2>
+  <table>
+    <tr><th>Aba</th><th>Mostra</th></tr>
+    <tr><td>Pressão × ângulo</td><td>Pressão [bar] × ângulo [° depois do PMS]</td></tr>
+    <tr><td>p × V (log)</td><td>Diagrama p–V em escala logarítmica</td></tr>
+    <tr><td>Queima</td><td>Fração queimada e liberação de calor [J/°]</td></tr>
+    <tr><td>Ciclo a ciclo</td><td>Pmax, IMEP líquido e CA50 de cada um dos últimos N ciclos: derivas, falhas e ciclos lentos se destacam</td></tr>
+  </table>
+
+  <h3>Modos de exibição</h3>
+  <p>Como num sistema real, as curvas mostram por padrão o <b>ciclo médio</b>: a média das últimas N curvas de pressão
+     (numa grade comum de 0,25°), com a própria liberação de calor e MFB.</p>
+  <table>
+    <tr><th>Modo</th><th>Mostra</th></tr>
+    <tr><td>Ciclo médio</td><td>Só o ciclo médio</td></tr>
+    <tr><td>Ciclo médio + envelope mín/máx</td><td>Ciclo médio e a faixa mín / máx dos N ciclos (padrão)</td></tr>
+    <tr><td>Ciclo médio + ciclos sobrepostos</td><td>Ciclo médio e os últimos 20 ciclos em linhas finas</td></tr>
+    <tr><td>Último ciclo</td><td>O ciclo mais recente (muda a cada ciclo)</td></tr>
+  </table>
+
+  <div class="dica">
+    <b>Dica:</b> o CA50 do ciclo médio não é a média dos CA50 dos ciclos mostrada na tabela: a média das pressões suaviza a combustão.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Indicação &middot; Revisão 0.1</div>
+</body>
+</html>

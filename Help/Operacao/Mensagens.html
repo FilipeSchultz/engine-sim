@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Mensagens do sistema</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Mensagens do sistema</h1>
+  <p class="subtitulo">Mensagens do painel de informações: o que significam e o que fazer</p>
+
+  <p>O painel de informações (canto superior esquerdo da tela principal) mostra sempre a <b>última</b> mensagem.
+     Na partida, as mensagens do CAN, da ECU e da indicação aparecem em sequência e só a última fica visível;
+     se precisar conferir uma delas, pressione <b>Enter</b> (recarregar o motor) ou salve o <code>calibration.dcm</code>
+     para gerar a mensagem da ECU de novo.</p>
+
+  <h2>CAN</h2>
+  <table>
+    <tr><th>Mensagem</th><th>Significado</th><th>O que fazer</th></tr>
+    <tr><td><code>CAN: AVL EMCON on channel 0 @ 500 kbit/s</code></td><td>Barramento aberto, simulador transmitindo como BME</td><td>—</td></tr>
+    <tr><td><code>CAN: REMOTE CONTROL</code></td><td>O HOST assumiu o controle (<code>Remote_Command</code> = 1)</td><td>—</td></tr>
+    <tr><td><code>CAN: MANUAL CONTROL</code></td><td>O HOST devolveu o controle; motor e dinamômetro foram levados ao estado seguro</td><td>—</td></tr>
+    <tr><td><code>CAN: LIFESIGNAL TIMEOUT - BACK TO MANUAL</code></td>
+        <td>O <code>LifesignalFeedback</code> do HOST parou de mudar por mais de <code>ENGINE_SIM_CAN_LIFESIGNAL_TIMEOUT_MS</code>.
+            A falha fica travada (<code>System_Error</code> = Trouble)</td>
+        <td>Verifique a automação e o cabo; depois envie <code>Reset_Key</code> (borda de subida)</td></tr>
+    <tr><td><code>CAN: ERROR RESET</code></td><td>Falha travada apagada pelo <code>Reset_Key</code></td><td>—</td></tr>
+    <tr><td><code>CAN: CAN support not compiled in ...</code></td><td>Executável compilado sem <code>CAN_ENABLED</code></td>
+        <td>Recompile com <code>-DCAN_ENABLED=ON</code></td></tr>
+    <tr><td><code>CAN: Unsupported bitrate: ...</code></td><td><code>ENGINE_SIM_CAN_BITRATE</code> inválido</td>
+        <td>Use 125000, 250000, 500000 ou 1000000</td></tr>
+    <tr><td><code>CAN: canOpenChannel ...</code> / <code>canBusOn ...</code> / <code>canSetBusParams ...</code></td>
+        <td>Erro do driver Kvaser ao abrir o canal</td>
+        <td>Confira se a interface está conectada, se o canal (<code>ENGINE_SIM_CAN_CHANNEL</code>) existe e se
+            outro programa (CanKing, automação) não abriu o canal em modo exclusivo</td></tr>
+  </table>
+
+  <h2>ECU</h2>
+  <table>
+    <tr><th>Mensagem</th><th>Significado</th><th>O que fazer</th></tr>
+    <tr><td><code>ECU: calibration loaded (fuel ON, ignition ON)</code></td>
+        <td><code>calibration.dcm</code> lido e aplicado. ON/OFF indica <code>EcuFuelEnable</code> e <code>EcuIgnEnable</code></td><td>—</td></tr>
+    <tr><td><code>... - N parameter(s) not in the file kept their values (...)</code></td>
+        <td>O arquivo não tem todos os parâmetros da ECU; os que faltam mantêm o valor atual (na partida, o padrão)</td>
+        <td>Normal em arquivos antigos. Para completar, gere um DCM novo (aprendizado) e copie os blocos que faltam</td></tr>
+    <tr><td><code>... unknown parameter 'X' ignored</code></td><td>O arquivo tem um parâmetro que esta ECU não conhece</td><td>Confira o nome</td></tr>
+    <tr><td><code>... blocks are not supported, skipped</code></td>
+        <td>Blocos DCM não suportados (<code>FESTWERTEBLOCK</code>, <code>STUETZSTELLENVERTEILUNG</code>, <code>GRUPPENKENNFELD</code>…)</td>
+        <td>Use <code>FESTWERT</code>, <code>KENNLINIE</code> e <code>KENNFELD</code></td></tr>
+    <tr><td><code>ECU: line N: ...</code> / <code>ECU: X: value ... out of range</code> /
+            <code>ECU: X: X axis must be strictly increasing</code> / <code>... but the ECU expects ...</code></td>
+        <td>Arquivo rejeitado: erro de sintaxe, valor fora dos limites, eixo não crescente ou tamanho errado.
+            <b>A ECU continua com a calibração anterior</b></td>
+        <td>Corrija a linha indicada e salve de novo</td></tr>
+    <tr><td><code>ECU: cannot open ...</code> / <code>ECU: cannot write ...</code></td>
+        <td>Arquivo DCM inacessível (ou o arquivo do aprendizado não pôde ser gravado)</td><td>Confira caminho e permissões</td></tr>
+  </table>
+
+  <h2>Indicação</h2>
+  <table>
+    <tr><th>Mensagem</th><th>Significado</th><th>O que fazer</th></tr>
+    <tr><td><code>INDI: streaming cylinder pressure to 127.0.0.1:5005</code></td><td>Fluxo UDP ligado</td><td>—</td></tr>
+    <tr><td><code>INDI: cannot write ...</code></td><td>O log <code>ENGINE_SIM_INDI_LOG</code> não pôde ser criado</td>
+        <td>Confira a pasta e se o arquivo não está aberto em outro programa</td></tr>
+    <tr><td><code>INDI: address must be host:port (...)</code> / <code>INDI: invalid IPv4 address ...</code></td>
+        <td><code>ENGINE_SIM_INDI_UDP</code> mal formatado</td><td>Use <code>IPv4:porta</code>, ex.: <code>127.0.0.1:5005</code></td></tr>
+  </table>
+
+  <h2>Operação</h2>
+  <table>
+    <tr><th>Mensagem</th><th>Origem</th></tr>
+    <tr><td><code>IGNITION ENABLED / DISABLED</code></td><td>Tecla A ou <code>Ignition_Key</code> do CAN</td></tr>
+    <tr><td><code>STARTER ENABLED / DISABLED</code></td><td>Tecla S ou <code>Starter</code> do CAN</td></tr>
+    <tr><td><code>DYNOMOMETER ENABLED / DISABLED</code></td><td>Tecla D</td></tr>
+    <tr><td><code>HOLD ENABLED</code> / <code>HOLD ON STANDBY [ENABLE DYNO. FOR HOLD]</code> / <code>HOLD DISABLED</code></td><td>Tecla H</td></tr>
+    <tr><td><code>Speed control set to ...</code></td><td>Acelerador pelo teclado (0 a 1)</td></tr>
+    <tr><td><code>[G] - Set dyno speed to ...</code></td><td>Rotação do hold</td></tr>
+    <tr><td><code>[N] - Set simulation freq to ...</code></td><td>Frequência da simulação</td></tr>
+    <tr><td><code>[Z] [X] [C] [V] [B] - Set ...</code></td><td>Ajustes de som</td></tr>
+    <tr><td><code>UPSHIFTED TO n</code> / <code>DOWNSHIFTED TO n</code> / <code>SHIFTED TO NEUTRAL</code> / <code>CLUTCH DEPRESSED</code></td><td>Transmissão</td></tr>
+    <tr><td><code>... kW @ ... rpm | ...</code></td><td>Tecla I: potência e torque máximos</td></tr>
+  </table>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Operação &middot; Revisão 0.1</div>
+</body>
+</html>

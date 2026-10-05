@@ -581,6 +581,36 @@ namespace es_script {
         ApplicationSettings m_settings;
     };
 
+    class SetEcuSettingsNode : public Node {
+    public:
+        SetEcuSettingsNode() { /* void */ }
+        virtual ~SetEcuSettingsNode() { /* void */ }
+
+    protected:
+        virtual void registerInputs() {
+            addInput("xcp", &m_settings.xcp);
+            addInput("xcp_address", &m_settings.xcpAddress);
+            addInput("xcp_port", &m_settings.xcpPort);
+            addInput("xcp_clock", &m_settings.xcpClock);
+            addInput("link", &m_settings.link);
+            addInput("link_address", &m_settings.linkAddress);
+            addInput("link_port", &m_settings.linkPort);
+            addInput("link_sync", &m_settings.linkSync);
+
+            Node::registerInputs();
+        }
+
+        virtual void _evaluate() {
+            readAllInputs();
+
+            m_settings.defined = true;
+            Compiler::output()->ecuSettings = m_settings;
+        }
+
+    protected:
+        EcuScriptSettings m_settings;
+    };
+
 } /* namespace es_script */
 
 #endif /* ATG_ENGINE_SIM_ACTIONS_H */

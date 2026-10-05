@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Compilar e executar</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script src="_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Compilar e executar</h1>
+  <p class="subtitulo">Dependências, opções do CMake, escolha do motor e primeira execução</p>
+
+  <h2>Dependências</h2>
+  <p>O CMake precisa encontrar as bibliotecas abaixo (elas devem estar no <code>PATH</code>):</p>
+  <table>
+    <tr><th>Dependência</th><th>Uso</th></tr>
+    <tr><td>SDL2 e SDL2_image</td><td>Janela, entrada e imagens</td></tr>
+    <tr><td>Boost (com os componentes opcionais)</td><td>Interpretador dos scripts <code>.mr</code> (Piranha)</td></tr>
+    <tr><td>Flex e Bison</td><td>Gerador do parser dos scripts <code>.mr</code></td></tr>
+    <tr><td>Kvaser CANlib SDK</td><td>Só com <code>CAN_ENABLED=ON</code>. Instalado por padrão em
+        <code>C:\Program Files (x86)\Kvaser\Canlib</code></td></tr>
+  </table>
+  <p>O repositório usa submódulos. Clone com:</p>
+<pre><code>git clone --recurse-submodules &lt;url do repositório&gt;</code></pre>
+
+  <h2>Opções do CMake</h2>
+  <table>
+    <tr><th>Opção</th><th>Padrão</th><th>Função</th></tr>
+    <tr><td><code>CAN_ENABLED</code></td><td>OFF</td>
+        <td>Liga o controle do dinamômetro via CAN (protocolo AVL EMCON, Kvaser CANlib).
+            Sem esta opção o simulador compila e roda, mas não abre o barramento.</td></tr>
+    <tr><td><code>CANLIB_DIR</code></td><td><code>C:/Program Files (x86)/Kvaser/Canlib</code></td>
+        <td>Pasta do SDK CANlib. O build falha com mensagem clara se <code>canlib.h</code> ou
+            <code>canlib32.lib</code> não forem encontrados.</td></tr>
+    <tr><td><code>PIRANHA_ENABLED</code></td><td>ON</td><td>Leitura dos scripts <code>.mr</code>. Mantenha ligado.</td></tr>
+    <tr><td><code>DISCORD_ENABLED</code></td><td>ON</td><td>Discord Rich Presence (herdado do engine-sim). Pode ser desligado.</td></tr>
+    <tr><td><code>DTV</code></td><td>OFF</td><td>Gravação de vídeo (tecla <b>Insert</b>).</td></tr>
+  </table>
+
+  <h2>Compilar</h2>
+  <ol>
+    <li>Na raiz do projeto:
+<pre><code>mkdir build
+cd build
+cmake .. -DCAN_ENABLED=ON
+cmake --build . --config Release</code></pre></li>
+    <li>O CMake gera uma solução do Visual Studio em <code>build\</code>. Também é possível abrir a
+        solução e executar o projeto <code>engine-sim-app</code>.</li>
+    <li>Se aparecer erro de DLL ausente ao executar, copie as DLLs que faltam (SDL2, CANlib…) para a pasta do <code>.exe</code>.</li>
+  </ol>
+
+  <table>
+    <tr><th>Alvo</th><th>O que é</th></tr>
+    <tr><td><code>engine-sim-app</code></td><td>O simulador (executável com janela)</td></tr>
+    <tr><td><code>engine-sim</code></td><td>Biblioteca da simulação física</td></tr>
+    <tr><td><code>engine-sim-ecu</code></td><td>Biblioteca da ECU virtual, sem dependência da simulação (pasta <code>ecu\</code>)</td></tr>
+    <tr><td><code>engine-sim-test</code></td><td>Testes (Google Test): sistema de gás, funções, sintetizador e ECU</td></tr>
+  </table>
+
+  <h2>Pastas usadas pelo executável</h2>
+  <p>O simulador procura o arquivo <code>delta.conf</code> ao lado do <code>.exe</code>. Ele tem duas linhas:
+     a pasta do motor gráfico (delta-studio) e a pasta <code>assets</code>, relativas ao executável.
+     Sem o arquivo, usa <code>../assets</code>.</p>
+  <table>
+    <tr><th>Caminho</th><th>Conteúdo</th></tr>
+    <tr><td><code>assets\main.mr</code></td><td>Script principal: escolhe o motor e as unidades da tela</td></tr>
+    <tr><td><code>assets\engines\</code></td><td>Scripts de motor (<code>.mr</code>)</td></tr>
+    <tr><td><code>assets\calibration\calibration.dcm</code></td><td>Calibração ativa da ECU virtual (recarregada ao salvar)</td></tr>
+    <tr><td><code>assets\calibration\datasets\</code></td><td>Uma calibração por motor (<code>cfr.dcm</code>, <code>gm_ls.dcm</code>…)</td></tr>
+    <tr><td><code>es\</code></td><td>Biblioteca de nós dos scripts (objetos, peças, sons)</td></tr>
+  </table>
+
+  <h2>Escolher o motor</h2>
+  <p>O motor carregado é o importado em <code>assets\main.mr</code>:</p>
+<pre><code>import "engine_sim.mr"
+import "themes/default.mr"
+import "engines/cfr/cfr_f1.mr"
+
+use_default_theme(
+    torque_units: "Nm",
+    power_units: "kW",
+    pressure_units: "kPa",
+    speed_units: "kph"
+)
+main()</code></pre>
+  <p>Troque a linha <code>import "engines/..."</code> e pressione <b>Enter</b> no simulador para recarregar o script
+     sem fechar o programa.</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> a calibração da ECU é por motor. Ao trocar o motor, copie o dataset dele
+    (<code>assets\calibration\datasets\&lt;motor&gt;.dcm</code>) sobre <code>calibration.dcm</code>.
+    Veja <a href="ECU/Arquivo_DCM.html">Arquivo DCM</a>.
+  </div>
+
+  <h2>Executar</h2>
+  <ol>
+    <li>Defina as <a href="Variaveis_Ambiente.html">variáveis de ambiente</a> das funções que vai usar
+        (CAN, ECU, indicação) no mesmo prompt. O CAN abre sozinho quando o executável foi compilado
+        com <code>CAN_ENABLED=ON</code>; as variáveis só mudam canal, taxa e comportamento.</li>
+    <li>Rode <code>build\Release\engine-sim-app.exe</code>.</li>
+    <li>Confira a primeira mensagem no painel de informações: ela informa o estado do CAN, da ECU e da indicação.
+        Veja <a href="Operacao/Mensagens.html">Mensagens do sistema</a>.</li>
+  </ol>
+<pre><code>set ENGINE_SIM_CAN_CHANNEL=0
+set ENGINE_SIM_INDI_UDP=127.0.0.1:5005
+cd build
+Release\engine-sim-app.exe</code></pre>
+
+  <div class="pendente">Complete: atalho ou script <code>.bat</code> padrão do laboratório para abrir o simulador já configurado,
+    e a pasta de instalação do executável no PC do banco.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Revisão 0.1</div>
+</body>
+</html>

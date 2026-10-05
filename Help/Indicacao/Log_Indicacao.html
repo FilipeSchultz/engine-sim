@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Log de indicação</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Log de indicação</h1>
+  <p class="subtitulo">CSV por ciclo e cilindro gravado pelo ENGINE_SIM_INDI_LOG</p>
+
+  <h2>Ligar</h2>
+<pre><code>set ENGINE_SIM_INDI_LOG=C:\temp\indi.csv</code></pre>
+  <p>Uma linha por cilindro e ciclo. Ângulos em graus em relação ao PMS de combustão de cada cilindro (positivo = depois do PMS).
+     Para um ponto de operação, faça a média de ~40 ciclos com a rotação segura pelo dinamômetro.</p>
+
+  <h2>Colunas</h2>
+  <table>
+    <tr><th>Coluna</th><th>Unidade</th><th>Significado</th></tr>
+    <tr><td><code>time_s</code>, <code>cycle</code>, <code>cylinder</code>, <code>rpm</code></td><td></td><td>Identificação do ciclo; rpm média no ciclo</td></tr>
+    <tr><td><code>map_kPa</code></td><td>kPa</td><td>Pressão do coletor quando o ciclo foi registrado (média da ECU no intervalo de ignição)</td></tr>
+    <tr><td><code>spark_btdc_deg</code></td><td>°</td><td>Avanço de ignição medido</td></tr>
+    <tr><td><code>pmax_bar</code>, <code>pmax_atdc_deg</code></td><td>bar, °</td><td>Pico de pressão e seu ângulo</td></tr>
+    <tr><td><code>imep_gross_bar</code>, <code>imep_net_bar</code></td><td>bar</td><td>Compressão + expansão / 720° completos</td></tr>
+    <tr><td><code>ca10_atdc_deg</code>, <code>ca50_atdc_deg</code>, <code>ca90_atdc_deg</code>, <code>burn_10_90_deg</code></td><td>°</td>
+        <td>Da liberação aparente de calor (baseada na pressão, γ = 1,33)</td></tr>
+    <tr><td><code>ca50_reference_atdc_deg</code></td><td>°</td><td>Do combustível queimado na simulação (valida a coluna acima)</td></tr>
+    <tr><td><code>misfire</code></td><td>0/1</td><td>Nenhum combustível queimado ou nenhum calor liberado</td></tr>
+    <tr><td><code>fresh_charge_mg</code></td><td>mg</td><td>Gás líquido pela válvula de admissão, do PMS de troca ao PMS de combustão</td></tr>
+    <tr><td><code>trapped_mass_mg</code></td><td>mg</td><td>Conteúdo do cilindro no fechamento da admissão (inclui o combustível da ECU)</td></tr>
+    <tr><td><code>residual_percent</code></td><td>%</td><td>(aprisionado − fresco) / aprisionado (inclui o combustível da ECU, então fica alguns % alto)</td></tr>
+    <tr><td><code>ve_percent</code></td><td>%</td><td>Carga fresca / (cilindrada × densidade do ar de admissão a 1 atm e <code>air_temperature</code>)</td></tr>
+    <tr><td><code>fuel_burned_mg</code></td><td>mg</td><td>Combustível queimado no ciclo</td></tr>
+    <tr><td><code>indicated_eff_gross_percent</code></td><td>%</td><td>Trabalho indicado bruto / energia do combustível queimado</td></tr>
+  </table>
+  <p>As massas usam a massa molar do ar para todo o gás (como a simulação).</p>
+
+  <h2>Uso na calibração</h2>
+  <table>
+    <tr><th>Para diagnosticar</th><th>Confira</th></tr>
+    <tr><td>Ar</td><td><code>fresh_charge_mg</code>, <code>ve_percent</code></td></tr>
+    <tr><td>Combustão completa</td><td><code>fuel_burned_mg</code> × carga fresca / AFR estequiométrico</td></tr>
+    <tr><td>Fase e duração da queima</td><td><code>ca50_atdc_deg</code>, <code>burn_10_90_deg</code></td></tr>
+    <tr><td>Perda de calor</td><td><code>indicated_eff_gross_percent</code>, <code>pmax_bar</code></td></tr>
+    <tr><td>Variação cíclica</td><td>COV de <code>imep_net_bar</code> (desvio padrão / média em ≥ 40 ciclos)</td></tr>
+  </table>
+  <p>Sequência completa em <a href="../Motores/Calibracao_Motor.html">Calibrar contra dados reais</a>.</p>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Indicação &middot; Revisão 0.1</div>
+</body>
+</html>

@@ -52,6 +52,12 @@ class GasSystem {
         void injectFuel(double n);
 
         double react(double n, const Mix &mix);
+
+        // Rich mixture: once the O2 is used up the remaining fuel is not left
+        // as vapour, the O2 is shared out and every fuel molecule ends up as
+        // CO / CO2 and H2 / H2O. Converts n mol of fuel into products (inert),
+        // internal energy unchanged.
+        void convertFuel(double n, double productsPerFuel);
         static double flowConstant(double flowRate, double P, double pressureDrop, double T, double hcr);
         static double k_28inH2O(double flowRateScfm);
         static double k_carb(double flowRateScfm);
@@ -75,7 +81,7 @@ class GasSystem {
         double flow(double k_flow, double dt, double P_env, double T_env, const Mix &mix = {});
 
         double pressureEquilibriumMaxFlow(const GasSystem *b) const;
-        double pressureEquilibriumMaxFlow(double P_env, double T_env) const;
+        double pressureEquilibriumMaxFlow(double P_env, double T_env, const Mix &mix = {}) const;
 
         inline static constexpr double kineticEnergyPerMol(double T, int degreesOfFreedom);
         inline static constexpr double heatCapacityRatio(int degreesOfFreedom);
@@ -106,10 +112,39 @@ class GasSystem {
         inline double heatCapacityRatio() const;
         inline Mix mix() const { return m_state.mix; }
 
+        // Heat capacity model: 0 = constant, set by the degrees of freedom
+        // (original); 1 = mean heat capacity varying with temperature and
+        // composition (air, fuel vapour, burned gas). Pressure and temperature
+        // follow the model; the flow equations keep the constant ratio of
+        // specific heats of the degrees of freedom in both cases.
+        void setHeatCapacityModel(int model);
+        inline int heatCapacityModel() const { return m_heatCapacityModel; }
+
+        // Internal energy per mol at temperature T (from 0 K), and its inverse
+        static double energyPerMol(double T, const Mix &mix, int model, int degreesOfFreedom);
+        static double temperatureFromEnergy(double energyPerMol, const Mix &mix, int model, int degreesOfFreedom);
+
+        // Model 1: instantaneous ratio of specific heats c_p / c_v
+        static double variableHeatCapacityRatio(double T, const Mix &mix);
+
+        // Energy carried per mol of gas leaving a volume: model 0 the
+        // internal energy (original), model 1 the enthalpy u + R T, i.e.
+        // with the flow work: the gas left behind expands and cools (exhaust
+        // blowdown), the gas entering a volume heats it (intake charge)
+        inline double flowEnergyPerMol() const;
+        static double flowEnergyPerMol(double T, const Mix &mix, int model, int degreesOfFreedom);
+
+        // E = 0.5 f n R T
+        inline double effectiveDegreesOfFreedom() const;
+
     protected:
+        // Model 1: mean degrees of freedom f = a + b T (2 c_v,mean / R)
+        static void meanHeatCapacity(const Mix &mix, double *a, double *b);
+
         State m_state;
 
         int m_degreesOfFreedom = 5;
+        int m_heatCapacityModel = 0;
 
         double m_chokedFlowLimit = 0;
         double m_chokedFlowFactorCached = 0;
@@ -238,14 +273,30 @@ inline double GasSystem::mass() const {
 
 inline double GasSystem::pressure() const {
     const double volume = this->volume();
-    return (volume != 0)
-        ? kineticEnergy() / (0.5 * m_degreesOfFreedom * volume)
-        : 0;
+    if (volume == 0) return 0;
+    else if (m_heatCapacityModel == 0) return kineticEnergy() / (0.5 * m_degreesOfFreedom * volume);
+    else return n() * constants::R * temperature() / volume;
 }
 
 inline double GasSystem::temperature() const {
     if (n() == 0) return 0;
-    else return kineticEnergy() / (0.5 * m_degreesOfFreedom * n() * constants::R);
+    else if (m_heatCapacityModel == 0) return kineticEnergy() / (0.5 * m_degreesOfFreedom * n() * constants::R);
+    else return temperatureFromEnergy(kineticEnergy() / n(), m_state.mix, m_heatCapacityModel, m_degreesOfFreedom);
+}
+
+inline double GasSystem::flowEnergyPerMol() const {
+    return (m_heatCapacityModel == 0)
+        ? kineticEnergyPerMol()
+        : kineticEnergyPerMol() + constants::R * temperature();
+}
+
+inline double GasSystem::effectiveDegreesOfFreedom() const {
+    if (m_heatCapacityModel == 0 || n() == 0) return m_degreesOfFreedom;
+
+    const double T = temperature();
+    return (T > 0)
+        ? kineticEnergy() / (0.5 * n() * constants::R * T)
+        : m_degreesOfFreedom;
 }
 
 inline double GasSystem::velocity_x() const {

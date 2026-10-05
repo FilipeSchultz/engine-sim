@@ -61,6 +61,10 @@ public node fuel => __engine_sim__fuel {
     input low_efficiency_attenuation [float]: 0.6;
     input max_turbulence_effect [float]: 2.0;
     input max_dilution_effect [float]: 10.0;
+    // Heat of vaporisation taken from the charge by the ECU's injected fuel
+    // (0 = none). Iso-octane: 308 kJ/kg; use less for fuel that evaporates
+    // from the port walls rather than from the air
+    input latent_heat [float]: 0.0;
     alias output __out [fuel_channel];
 }
 
@@ -90,6 +94,16 @@ private node _engine => __engine_sim__engine {
     input hf_gain [float];
     input jitter [float];
     input noise [float];
+    input turbulence_ratio [float];
+    input wall_heat_transfer [float];
+    input wall_temperature [float];
+    input flame_model [int];
+    input spark_plug_offset [float];
+    input cycle_variation [float];
+    input gas_model [int];
+    input mixture_nonuniformity [float];
+    input injector_flow [float];
+    input injector_dead_time [float];
 
     alias output __out [engine_channel];
 }
@@ -115,6 +129,45 @@ public node engine {
     input jitter: 0.5;
     input noise: 1.0;
 
+    // In-cylinder turbulence intensity / mean piston speed. Higher for heads
+    // with strong swirl or tumble (faster burn)
+    input turbulence_ratio: 0.5;
+
+    // Multiplier of the Hohenberg wall heat transfer correlation (1.0 = as
+    // published). 0 keeps the original, nearly adiabatic, cylinder
+    input wall_heat_transfer: 0.0;
+
+    // Mean temperature of the combustion chamber surfaces (head, liner,
+    // piston crown, valves), absolute
+    input wall_temperature: (90.0 + 273.15) * units.K;
+
+    // 0 = original flame model (speed fixed at the spark)
+    // 1 = flame speed updated every step from the unburned gas state, the
+    //     equivalence ratio and the residual gas (see docs/engine_modeling.md)
+    // 2 = as 1, with a spherical flame and entrainment / burn-up
+    input flame_model: 0;
+
+    // Flame model 2: radial spark plug position / bore radius (0 = central)
+    input spark_plug_offset: 0.0;
+
+    // Flame model 2: cycle-to-cycle variation, standard deviation of the
+    // turbulence at the spark as a fraction (sets the COV of IMEP)
+    input cycle_variation: 0.0;
+
+    // 0 = original gas properties (constant gamma = 1.4)
+    // 1 = heat capacities varying with temperature and composition, rich
+    //     mixture chemistry (CO / H2) and mixture non-uniformity
+    input gas_model: 0;
+
+    // Gas model 1: standard deviation of the local equivalence ratio / mean
+    // (mixture preparation: ~0.1 for a carburettor or port injection)
+    input mixture_nonuniformity: 0.1;
+
+    // Port injectors, driven by the ECU: static flow [cc/min] and dead time
+    // [ms]. The ECU calibration (InjectorFlow, InjectorDeadTime) should match.
+    input injector_flow: 440.0;
+    input injector_dead_time: 1.0;
+
     alias output __out [_engine]:
         _engine(
             name: name,
@@ -132,7 +185,17 @@ public node engine {
             simulation_frequency: simulation_frequency,
             hf_gain: hf_gain,
             jitter: jitter,
-            noise: noise
+            noise: noise,
+            turbulence_ratio: turbulence_ratio,
+            wall_heat_transfer: wall_heat_transfer,
+            wall_temperature: wall_temperature,
+            flame_model: flame_model,
+            spark_plug_offset: spark_plug_offset,
+            cycle_variation: cycle_variation,
+            gas_model: gas_model,
+            mixture_nonuniformity: mixture_nonuniformity,
+            injector_flow: injector_flow,
+            injector_dead_time: injector_dead_time
         );
 }
 
@@ -492,6 +555,7 @@ public node intake_parameters {
     input runner_length: 4.0 * units.inch;
     input runner_flow_rate: k_carb(200.0);
     input velocity_decay: 0.25;
+    input air_temperature: (25.0 + 273.15) * units.K;
 }
 
 private node _intake => __engine_sim__intake {
@@ -505,6 +569,7 @@ private node _intake => __engine_sim__intake {
     input throttle_gamma [float];
     input runner_length [float];
     input velocity_decay [float];
+    input air_temperature [float];
     alias output __out [intake_channel];
 }
 
@@ -520,6 +585,8 @@ public node intake {
     input throttle_gamma: parameters.throttle_gamma;
     input runner_length: parameters.runner_length;
     input velocity_decay: parameters.velocity_decay;
+    // Temperature of the air drawn in (test cell intake air conditioning)
+    input air_temperature: parameters.air_temperature;
     alias output __out [_intake]:
         _intake(
             plenum_volume: plenum_volume,
@@ -531,7 +598,8 @@ public node intake {
             idle_throttle_plate_position: idle_throttle_plate_position,
             throttle_gamma: throttle_gamma,
             runner_length: runner_length,
-            velocity_decay: velocity_decay
+            velocity_decay: velocity_decay,
+            air_temperature: air_temperature
         );
 }
 

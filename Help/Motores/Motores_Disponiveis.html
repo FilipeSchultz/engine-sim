@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Motores disponíveis</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Motores disponíveis</h1>
+  <p class="subtitulo">Scripts em assets/engines e o estado de cada um na célula virtual</p>
+
+  <p>Para usar um motor, importe-o em <code>assets/main.mr</code> e copie o dataset da ECU correspondente sobre
+     <code>assets/calibration/calibration.dcm</code> (quando existir).</p>
+
+  <h2>Motores da célula de teste</h2>
+  <table>
+    <tr><th>Motor</th><th>Script</th><th>Modelos do fork</th><th>Dataset da ECU</th></tr>
+    <tr><td><b>Waukesha CFR F1</b> (monocilíndrico, taxa variável)</td><td><code>cfr/cfr_f1.mr</code></td>
+        <td><span class="tag tag-op">Gás 1, chama 2, calor</span></td><td><code>cfr.dcm</code></td></tr>
+    <tr><td><b>Volvo D13</b> (6 em linha, diesel, 12,8 L)</td><td><code>volvo/d13.mr</code></td>
+        <td><span class="tag tag-tr">Originais</span></td><td>—</td></tr>
+    <tr><td><b>GM LS</b> (V8)</td><td><code>atg-video-2/07_gm_ls.mr</code></td>
+        <td><span class="tag tag-tr">Originais</span></td><td><code>gm_ls.dcm</code></td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção (Volvo D13):</b> o simulador só modela combustão por centelha (frente de chama). A injeção diesel é
+    aproximada por uma "centelha" perto do PMS queimando um combustível com as propriedades do diesel, e não há turbo:
+    o motor é aspirado e o torque fica bem abaixo dos ~2600 Nm do D13 real.
+  </div>
+
+  <h2>Motores herdados do engine-sim</h2>
+  <table>
+    <tr><th>Pasta</th><th>Conteúdo</th></tr>
+    <tr><td><code>atg-video-1/</code></td><td>Motores do primeiro vídeo do engine-sim: Honda TRX520, Kohler CH750, Harley-Davidson Shovelhead,
+        Hayabusa, Honda VTEC, Subaru EJ25, Audi I5, radial de 5 cilindros</td></tr>
+    <tr><td><code>atg-video-2/</code></td><td>Motores do segundo vídeo: Subaru EJ25 (coletores iguais e desiguais), Toyota 2JZ,
+        V6 60°, V6 90° (ignição par e ímpar), GM LS, Ferrari F136, radial de 9, Lexus LFA V10, Merlin V12, Ferrari 412 T2</td></tr>
+    <tr><td><code>audi/</code>, <code>bmw/</code>, <code>chevrolet/</code>, <code>kohler/</code></td>
+        <td>Audi I5, BMW M52B28, Chevrolet 454 e outros</td></tr>
+  </table>
+  <p>Os motores herdados usam os modelos originais (gás com γ = 1,4, chama cilíndrica, parede quase adiabática).
+     Servem para som e demonstração; para resultados de combustão, aplique os
+     <a href="Parametros_Combustao.html">parâmetros de combustão</a> e calibre como em
+     <a href="Calibracao_Motor.html">Calibrar contra dados reais</a>.</p>
+
+  <div class="pendente">Complete: quais motores serão usados no laboratório, o estado de calibração de cada um
+    e a origem dos dados (desenho, catálogo, medição).</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Scripts de motor &middot; Revisão 0.1</div>
+</body>
+</html>

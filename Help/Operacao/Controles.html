@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Controles do teclado</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Controles do teclado</h1>
+  <p class="subtitulo">Teclas e mouse do simulador, e o que muda sob controle CAN</p>
+
+  <p>A interface não tem botões: tudo é feito pelo teclado e pela roda do mouse, com a janela do simulador em foco.
+     Cada comando mostra uma mensagem no painel de informações (canto superior esquerdo da tela principal).</p>
+
+  <h2>Motor</h2>
+  <table>
+    <tr><th>Tecla</th><th>Ação</th></tr>
+    <tr><td><b>A</b></td><td>Liga / desliga a ignição</td></tr>
+    <tr><td><b>S</b> (segurar)</td><td>Motor de partida</td></tr>
+    <tr><td><b>Q</b>, <b>W</b>, <b>E</b>, <b>R</b> (segurar)</td><td>Acelerador em 1 %, 10 %, 20 % e 100 %. Ao soltar, volta para 0 %</td></tr>
+    <tr><td><b>Espaço</b> + roda do mouse</td><td>Ajuste fino do acelerador. Com Espaço segurado o valor é mantido ao soltar Q/W/E/R</td></tr>
+    <tr><td><b>Enter</b></td><td>Recarrega o script do motor (<code>assets\main.mr</code>) sem fechar o programa</td></tr>
+  </table>
+
+  <h2>Dinamômetro</h2>
+  <table>
+    <tr><th>Tecla</th><th>Ação</th></tr>
+    <tr><td><b>D</b></td><td>Liga / desliga o dinamômetro</td></tr>
+    <tr><td><b>H</b></td><td>Liga / desliga a rotação constante (RPM hold). Só atua com o dinamômetro ligado</td></tr>
+    <tr><td><b>G</b> + roda do mouse</td><td>Muda a rotação do hold, em passos de <code>dyno_hold_step</code> do script</td></tr>
+    <tr><td><b>I</b></td><td>Mostra a potência e o torque máximos medidos no painel de informações</td></tr>
+  </table>
+  <p>Detalhes em <a href="Dinamometro.html">Dinamômetro</a>.</p>
+
+  <h2>Transmissão</h2>
+  <table>
+    <tr><th>Tecla</th><th>Ação</th></tr>
+    <tr><td><b>&uarr;</b> / <b>&darr;</b></td><td>Sobe / desce marcha (abaixo da 1ª fica em neutro)</td></tr>
+    <tr><td><b>Shift</b> (segurar)</td><td>Embreagem pressionada. Com <b>Espaço</b> junto, a embreagem acopla e desacopla devagar</td></tr>
+    <tr><td><b>T</b> / <b>U</b> (segurar)</td><td>Diminui / aumenta a pressão da embreagem gradualmente</td></tr>
+    <tr><td><b>Y</b> (segurar)</td><td>Mantém a pressão de embreagem atual (sem Y, T, U ou Shift ela volta a 100 %)</td></tr>
+  </table>
+
+  <h2>Som</h2>
+  <table>
+    <tr><th>Tecla + roda do mouse</th><th>Ajusta</th></tr>
+    <tr><td><b>Z</b></td><td>Volume</td></tr>
+    <tr><td><b>X</b></td><td>Nível de convolução (resposta ao impulso do escape)</td></tr>
+    <tr><td><b>C</b></td><td>Ganho de alta frequência</td></tr>
+    <tr><td><b>V</b></td><td>Ruído de baixa frequência</td></tr>
+    <tr><td><b>B</b></td><td>Ruído de alta frequência</td></tr>
+  </table>
+  <p>Com <b>Espaço</b> segurado junto, os passos ficam 10 vezes menores.</p>
+
+  <h2>Simulação e visualização</h2>
+  <table>
+    <tr><th>Tecla</th><th>Ação</th></tr>
+    <tr><td><b>N</b> + roda do mouse</td><td>Frequência da simulação (400 Hz a 400 kHz). Ver o aviso abaixo</td></tr>
+    <tr><td><b>1</b> a <b>5</b> (segurar)</td><td>Câmera lenta: 1/10, 1/100, 1/200, 1/500 e 1/1000 do tempo real</td></tr>
+    <tr><td><b>Tab</b></td><td>Troca a tela (três layouts). Ver <a href="Telas.html">Telas e instrumentos</a></td></tr>
+    <tr><td><b>M</b> / <b>,</b></td><td>Próxima / anterior camada de visualização do motor (bancadas de cilindros)</td></tr>
+    <tr><td><b>F1</b> / <b>F2</b> (segurar)</td><td>Gira o desenho do motor; <b>F3</b> volta ao ângulo inicial</td></tr>
+    <tr><td><b>F</b></td><td>Tela cheia / janela</td></tr>
+    <tr><td><b>Insert</b></td><td>Inicia / para a gravação de vídeo (só com o build <code>DTV=ON</code>)</td></tr>
+    <tr><td><b>Esc</b></td><td>Fecha o programa</td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção:</b> a frequência da simulação muda os resultados de combustão e indicação. Calibre e meça sempre
+    na mesma frequência, a definida em <code>simulation_frequency</code> no script do motor.
+    Veja <a href="../Motores/Script_Motor.html">Scripts de motor</a>.
+  </div>
+
+  <h2>Sob controle CAN (modo remoto)</h2>
+  <p>Quando a automação do banco (HOST) assume o controle pelo CAN, algumas teclas deixam de atuar:</p>
+  <table>
+    <tr><th>Função</th><th>No modo remoto</th></tr>
+    <tr><td>Acelerador (Q, W, E, R, Espaço)</td><td>Vem do sinal <code>Alpha_demand</code> do HOST</td></tr>
+    <tr><td>Ignição (A) e partida (S)</td><td>Vêm dos sinais <code>Ignition_Key</code> e <code>Starter</code> do HOST</td></tr>
+    <tr><td>Dinamômetro (D, H, G)</td><td>Ignorados: o HOST comanda liga/desliga, modo e demanda</td></tr>
+    <tr><td>Câmera lenta (1 a 5)</td><td>Ignorada: a simulação fica em tempo real</td></tr>
+    <tr><td>Som, telas, marcha, embreagem</td><td>Continuam no teclado</td></tr>
+  </table>
+  <p>Veja <a href="../Comunicacao/CAN_EMCON.html">Controle CAN (AVL EMCON)</a>.</p>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Operação &middot; Revisão 0.1</div>
+</body>
+</html>

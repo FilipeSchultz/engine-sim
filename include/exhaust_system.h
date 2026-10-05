@@ -42,6 +42,11 @@ class ExhaustSystem : public Part {
 
         inline GasSystem *getSystem() { return &m_system; }
 
+        void setHeatCapacityModel(int model) {
+            m_system.setHeatCapacityModel(model);
+            m_atmosphere.setHeatCapacityModel(model);
+        }
+
     protected:
         GasSystem m_atmosphere;
         GasSystem m_system;

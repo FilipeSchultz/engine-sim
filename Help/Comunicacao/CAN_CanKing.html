@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Teste com Kvaser CanKing</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Teste com Kvaser CanKing</h1>
+  <p class="subtitulo">Fazer o papel do HOST sem a automação do banco, com o canal CAN virtual da Kvaser</p>
+
+  <table class="ficha">
+    <tr><td>Projeto</td><td><code>CanKing_Proj.ckproj</code> (raiz do projeto)</td></tr>
+    <tr><td>Banco de dados</td><td><code>AVL_Dyno_EMCON_v2.7.dbc</code></td></tr>
+    <tr><td>Canal</td><td>Kvaser Virtual CAN Driver, 500 kbit/s</td></tr>
+  </table>
+
+  <p>Sem hardware, o driver virtual da Kvaser liga dois programas no mesmo PC: o simulador abre um canal virtual e o
+     CanKing abre o outro, como se estivessem no mesmo barramento.</p>
+
+  <h2>Passos</h2>
+  <ol>
+    <li>Instale o driver Kvaser (inclui o <i>Kvaser Virtual CAN Driver</i>) e o Kvaser CanKing.</li>
+    <li>Abra o simulador no canal virtual. Confira na mensagem <code>CAN: AVL EMCON on channel N</code> que é o canal certo
+        (<code>ENGINE_SIM_CAN_CHANNEL</code>).</li>
+    <li>Abra <code>CanKing_Proj.ckproj</code> no CanKing. Ele já tem o canal "CAN 1" no driver virtual a 500 kbit/s e o DBC carregado.</li>
+    <li>Confira a recepção: <code>BME_Control</code> a cada 100 ms e <code>BME_Actual_1</code> / <code>_2</code> a cada 20 ms,
+        com <code>Dyno_Speed</code> acompanhando a rotação do motor.</li>
+    <li>Envie <code>HOST_Control</code> com <code>Remote_Command</code> = 1. O simulador mostra <code>CAN: REMOTE CONTROL</code>
+        e <code>System_State</code> passa para 2.</li>
+    <li>Com <code>Ignition_Key</code> = 1 e <code>Starter</code> = 1 por alguns segundos, o motor pega. Depois envie
+        <code>Alpha_demand</code> e as demandas do dinamômetro.</li>
+  </ol>
+
+  <div class="aviso">
+    <b>Atenção:</b> o canal do simulador e o do CanKing precisam ser canais diferentes do mesmo dispositivo virtual
+    (o driver virtual liga os canais entre si). Os números de canal do CanKing e do CANlib podem não coincidir.
+  </div>
+
+  <div class="pendente">Complete com prints do CanKing: a janela de envio de cada mensagem HOST, a janela de recepção com os sinais
+    decodificados, e o número de canal correto a usar em <code>ENGINE_SIM_CAN_CHANNEL</code> neste PC.</div>
+
+  <div class="dica">
+    <b>Dica:</b> para testar o timeout, ligue <code>ENGINE_SIM_CAN_LIFESIGNAL_TIMEOUT_MS=100</code> e envie
+    <code>HOST_Demand_2</code> com <code>LifesignalFeedback</code> fixo: o simulador deve voltar a Manual com falha.
+    Mude o <code>Reset_Key</code> de 0 para 1 para apagar a falha.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Comunicação &middot; Revisão 0.1</div>
+</body>
+</html>

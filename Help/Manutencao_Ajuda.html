@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Como editar a ajuda</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script src="_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Como editar a ajuda</h1>
+  <p class="subtitulo">Estrutura dos arquivos, criação de páginas e como abrir a ajuda</p>
+
+  <h2>Estrutura da pasta</h2>
+<pre><code>Help\
+  index.html              moldura (árvore + pesquisa + conteúdo)
+  estilo.css              visual das páginas de conteúdo
+  _Modelo.html            modelo para criar páginas novas
+  Inicio.html             página inicial
+  Compilar_Executar.html  ...demais páginas da raiz
+  Operacao\               teclado, telas, dinamômetro, mensagens
+  Motores\                scripts de motor e calibração do modelo
+  Modelagem\              modelos físicos
+  ECU\                    ECU virtual
+    _Modelo_Funcao.html   modelo para páginas de função da ECU
+  Comunicacao\            CAN (AVL EMCON) e XCP
+  Indicacao\              indicação de combustão e IndiCom
+  img\                    prints de tela (opcional)
+  _sys\
+    toc.js                ÁRVORE DE CONTEÚDO (editar ao criar páginas)
+    pagina.js             script das páginas (não editar)
+    frame.js, frame.css   moldura (não editar)
+    img\                  logo, capa e favicon da marca (SVG)</code></pre>
+
+  <h2>Criar uma página nova</h2>
+  <ol>
+    <li>Copie <code>_Modelo.html</code> e renomeie, <b>sem acento e sem espaço</b>
+        (ex.: <code>Roteiro_Ensaio.html</code>).</li>
+    <li>Edite o <code>&lt;title&gt;</code>, o <code>&lt;h1&gt;</code> e o conteúdo.
+        Mantenha a linha <code>&lt;script src="_sys/pagina.js"&gt;</code> no cabeçalho.</li>
+    <li>Abra <code>_sys\toc.js</code> e adicione a página na árvore:
+<pre><code>{ titulo: 'Roteiro de ensaio', pagina: 'Roteiro_Ensaio.html' }</code></pre></li>
+    <li>Atualize a página no navegador (F5). A pesquisa passa a incluir a página automaticamente.</li>
+  </ol>
+
+  <h2>Subpastas e subtópicos</h2>
+  <p>Páginas podem ficar em subpastas, como <code>ECU\</code>. Numa subpasta:</p>
+  <ul>
+    <li>Os caminhos no cabeçalho começam com <code>../</code>:
+        <code>../estilo.css</code>, <code>../_sys/pagina.js</code> e imagens em <code>../img/</code>.
+        O modelo <code>ECU\_Modelo_Funcao.html</code> já vem assim.</li>
+    <li>No <code>toc.js</code>, o caminho inclui a pasta, com barra normal:
+        <code>pagina: 'ECU/Funcoes.html'</code>.</li>
+    <li>Links entre páginas da mesma pasta usam só o nome (<code>Funcoes.html</code>).
+        Para outra pasta, use <code>../</code> (<code>../Operacao/Dinamometro.html</code>).</li>
+  </ul>
+  <p>Para dividir um tópico em várias páginas, faça um item com <code>pagina</code> e <code>filhos</code>.
+     Clicar no nome abre a visão geral e mostra as subpáginas:</p>
+<pre><code>{
+  titulo: 'ECU virtual',
+  pagina: 'ECU/ECU.html',
+  filhos: [
+    { titulo: 'Funções',    pagina: 'ECU/Funcoes.html' },
+    { titulo: 'Parâmetros', pagina: 'ECU/Parametros.html' }
+  ]
+}</code></pre>
+
+  <h2>Elementos de página</h2>
+  <table>
+    <tr><th>Classe</th><th>Uso</th></tr>
+    <tr><td><code>subtitulo</code></td><td>Linha logo abaixo do título</td></tr>
+    <tr><td><code>ficha</code></td><td>Tabela curta sem bordas no topo (arquivo, classe, variável)</td></tr>
+    <tr><td><code>cartao</code></td><td>Caixa de destaque (lista de páginas de um tópico, atalhos da página inicial)</td></tr>
+    <tr><td><code>dica</code> / <code>aviso</code> / <code>perigo</code></td><td>Caixas verde / laranja / vermelha</td></tr>
+    <tr><td><code>pendente</code></td><td>Caixa tracejada: trecho ainda a escrever. Apague a caixa quando preencher</td></tr>
+    <tr><td><code>tag tag-op</code> / <code>tag tag-tr</code></td><td>Etiqueta verde / cinza dentro de tabelas</td></tr>
+    <tr><td><code>tela</code>, <code>lado</code></td><td>Print de tela, e print ao lado da tabela que o explica</td></tr>
+  </table>
+
+  <div class="aviso">
+    <b>Atenção:</b> a pesquisa só enxerga páginas que estão na árvore (<code>toc.js</code>).
+    Uma página fora da árvore abre normalmente, mas não aparece nos resultados.
+  </div>
+
+  <h2>Abrir a ajuda</h2>
+  <p>Abra <code>Help\index.html</code> no Chrome ou no Edge (dois cliques, ou um atalho na área de trabalho).
+     Para abrir direto numa página, aponte para o arquivo dela (ex.: <code>Help\ECU\Parametros.html</code>): a página detecta
+     que foi aberta sozinha e se recarrega dentro da moldura, já com a árvore e a pesquisa.</p>
+  <p>Um link também pode usar o parâmetro <code>p</code>: <code>index.html?p=ECU/Parametros.html</code>.</p>
+
+  <div class="pendente">
+    Ainda não há tecla de ajuda no simulador (F1 a F3 já giram o desenho do motor). Se for criada, use por exemplo
+    <code>ShellExecuteA(nullptr, "open", caminho_da_pagina, nullptr, nullptr, SW_SHOWNORMAL)</code> com o caminho
+    absoluto de <code>Help\index.html</code> ou da página da tela atual, e documente aqui a tecla escolhida.
+  </div>
+
+  <h2>Limitações conhecidas</h2>
+  <ul>
+    <li>A moldura foi feita para Chrome e Edge.</li>
+    <li>Na primeira vez que a aba Pesquisar é usada, as páginas são lidas em segundo plano
+        (leva cerca de um segundo por dezena de páginas).</li>
+  </ul>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Revisão 0.1</div>
+</body>
+</html>

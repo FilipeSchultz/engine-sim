@@ -71,6 +71,8 @@ void Engine::initialize(const Parameters &params) {
     m_initialSimulationFrequency = params.initialSimulationFrequency;
     m_initialJitter = params.initialJitter;
     m_initialNoise = params.initialNoise;
+    m_injectorFlow_ccmin = params.injectorFlow_ccmin;
+    m_injectorDeadTime_ms = params.injectorDeadTime_ms;
 
     m_crankshafts = new Crankshaft[m_crankshaftCount];
     m_cylinderBanks = new CylinderBank[m_cylinderBankCount];

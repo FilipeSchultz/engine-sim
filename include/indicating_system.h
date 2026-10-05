@@ -35,6 +35,21 @@ class IndicatingSystem {
             double ca90_deg = 0;
             double ca50Reference_deg = 0;   // from the simulation's burned fuel
             bool misfire = false;
+
+            // Gas exchange and energy balance (simulation truth, not available
+            // to a real indicating system)
+            double freshCharge_mg = 0;      // gas entering through the intake valve
+            double trappedMass_mg = 0;      // cylinder content at intake valve closing (incl. ECU fuel)
+            double residual_percent = 0;    // (trapped - fresh) / trapped, includes the ECU fuel
+            double volumetricEfficiency_percent = 0;    // fresh charge vs intake air at 1 atm
+            double fuelBurned_mg = 0;
+            double indicatedEfficiency_percent = 0;     // net indicated work / fuel energy
+
+            // Exhaust gas temperature: of the gas leaving the cylinder,
+            // weighted by the exhaust flow (the "mass averaged" EGT), and the
+            // time average of the gas in the exhaust port / runner
+            double exhaustTempFlowWeighted_C = 0;
+            double exhaustPortTemp_C = 0;
         };
 
         // Engine data an indicating tool needs (normally entered by the operator)
@@ -80,6 +95,12 @@ class IndicatingSystem {
             double volume;      // [m^3]
             double burnedFuel;  // cumulative [kg]
             bool valvesClosed;
+            bool intakeOpen;
+            double intakeFlow;  // gas entering the cylinder during this step [mol]
+            double moles;       // cylinder content [mol]
+            double exhaustFlow; // gas leaving the cylinder during this step [mol]
+            double gasTemp;     // cylinder gas [K]
+            double portTemp;    // exhaust port / runner gas [K]
         };
 
         struct Cylinder {
@@ -101,6 +122,8 @@ class IndicatingSystem {
 
         bool m_analysis;
         bool m_rawCapture;
+        double m_fuelEnergyDensity;     // [J/kg]
+        double m_airTemperature;        // intake air [K]
         std::vector<float> m_raw;
         EngineInfo m_info;
 };

@@ -8,6 +8,7 @@
 #include "cylinder_head.h"
 #include "units.h"
 #include "fuel.h"
+#include "flame_geometry.h"
 
 class Engine;
 class CombustionChamber : public atg_scs::ForceGenerator {
@@ -21,6 +22,26 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double StartingPressure;
             double StartingTemperature;
             double CrankcasePressure;
+
+            // Multiplier of the Hohenberg wall heat transfer coefficient;
+            // 0 = original constant coefficient (nearly adiabatic)
+            double WallHeatTransfer = 0.0;
+            double WallTemperature = units::celcius(90.0);
+
+            // 0 = original flame model (flame speed fixed at the spark)
+            // 1 = flame speed updated every step from the unburned gas state
+            // 2 = spherical flame with entrainment and burn-up
+            int FlameModel = 0;
+
+            // Flame model 2: radial spark plug position / bore radius, and the
+            // standard deviation of the turbulence seen by each cycle's flame
+            double SparkPlugOffset = 0.0;
+            double CycleVariation = 0.0;
+
+            // 1 = heat capacities varying with temperature and composition,
+            // rich mixture chemistry and mixture non-uniformity
+            int GasModel = 0;
+            double MixtureNonuniformity = 0.0;
         };
 
         struct FlameEvent {
@@ -34,6 +55,35 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             double travel_x = 0.0;
             double travel_y = 0.0;
             GasSystem::Mix globalMix;
+
+            // Flame models 1 and 2: conditions at the spark
+            double turbulence = 0.0;
+            double phi = 1.0;
+            double residual = 0.0;          // burned gas mole fraction
+            double sparkPressure = 0.0;
+            double sparkTemperature = 0.0;
+
+            // Flame model 2: fractions of the charge entrained by the flame
+            // front and burned, flame radius
+            double entrained = 0.0;
+            double burned = 0.0;
+            double radius = 0.0;
+
+            // Flame models 1 and 2: unburned gas temperature, compressed
+            // isentropically since the spark
+            double unburnedTemperature = 0.0;
+            double lastPressure = 0.0;
+
+            // Flame model 2: heat released and moles produced per mol of
+            // charge when it burns, and the burned gas composition (set the
+            // burned / unburned density ratio)
+            double heatPerMol = 0.0;
+            double moleGain = 1.0;
+            GasSystem::Mix burnedMix;
+
+            // Heat released / complete combustion of the O2-limited fuel
+            // (gas model 1: rich mixture chemistry, mixture non-uniformity)
+            double heatFactor = 1.0;
         };
 
         struct FrictionModelParams {
@@ -92,15 +142,26 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         double m_peakTemperature;
         double m_nBurntFuel;
 
-        // Set by the ECU: fuel delivery for this cylinder [mol/s]. Sequential
-        // injection: the fuel accumulates while the intake valve is closed and
-        // enters with the intake charge while it is open, so none of it can
-        // flow back into the plenum
-        double m_ecuFuelRate;
-        double m_ecuPendingFuel;
+        // Port injection, driven by the ECU hardware: each injector pulse adds
+        // fuel to the port, where it waits until the intake valve opens (and
+        // the exhaust valve has closed) and enters with the charge, so none of
+        // it can flow back into the plenum or out of the exhaust
+        void setEcuFuelControl(bool active) {
+            m_ecuFuelActive = active;
+            if (!active) m_ecuPendingFuel = 0;
+        }
+        void injectFuel(double n) { if (m_ecuFuelActive) m_ecuPendingFuel += n; }
+
+        bool m_ecuFuelActive;
+        double m_ecuPendingFuel;    // [mol]
 
     protected:
         double calculateFrictionForce(double v) const;
+        double unburnedTemperature() const { return m_flameEvent.unburnedTemperature; }
+        void updateUnburnedTemperature();
+        void convertRichFuel(double n_reacting, double fuelBurned);
+        double unburnedFlameSpeed() const;
+        void updateSphericalFlame(double dt, double volume);
         void updateCycleStates();
 
         double m_intakeFlowRate;
@@ -116,6 +177,15 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         double m_exhaustFlow;
 
         double m_crankcasePressure;
+        double m_wallHeatTransfer;
+        double m_wallTemperature;
+        int m_flameModel;
+        int m_gasModel;
+        double m_mixtureNonuniformity;
+        double m_sparkPlugOffset;
+        double m_cycleVariation;
+        FlameGeometry m_flameGeometry;
+        double m_meanPistonSpeed;
 
         double *m_pressure;
         double *m_pistonSpeed;
