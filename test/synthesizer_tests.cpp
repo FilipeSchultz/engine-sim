@@ -3,6 +3,9 @@
 #include "../include/synthesizer.h"
 
 #include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <vector>
 
 using namespace std::chrono_literals;
 
@@ -107,84 +110,104 @@ TEST(SynthesizerTests, SynthesizerSampleTest) {
 }
 */
 
+namespace {
+    // Unit impulse response on every channel: the convolution passes the
+    // signal through (the synthesizer needs one before rendering)
+    void setUnitImpulseResponses(Synthesizer &synth, int channels) {
+        const int16_t impulse[] = { INT16_MAX };
+        for (int i = 0; i < channels; ++i) {
+            synth.initializeImpulseResponse(impulse, 1, 1.0f, i);
+        }
+    }
+
+    // Half the input buffer (1024): the synthesizer is fed continuously in the
+    // simulator, a test that stops feeding must not wrap the input buffer
+    constexpr int SystemTestBlocks = 32;
+    constexpr int SystemTestBlockSize = 16;
+
+    double rampInput(int i, bool zero) {
+        return zero ? 0.0 : 100.0 * std::sin(i * 0.2);
+    }
+
+    // Renders the test signal block by block in this thread
+    std::vector<int16_t> renderSingleThread(bool zero) {
+        Synthesizer synth;
+        setupSynchronizedSynthesizer(synth);
+        setUnitImpulseResponses(synth, 8);
+
+        std::vector<int16_t> output;
+        int16_t block[2048];
+        for (int i = 0; i < SystemTestBlocks * SystemTestBlockSize;) {
+            for (int j = 0; j < SystemTestBlockSize; ++j, ++i) {
+                const double v = rampInput(i, zero);
+                const double data[] = { v, v, v, v, v, v, v, v };
+                synth.writeInput(data);
+            }
+
+            synth.endInputBlock();
+            synth.renderAudio();
+
+            const int n = synth.readAudioOutput(2048, block);
+            output.insert(output.end(), block, block + n);
+        }
+
+        synth.destroy();
+        return output;
+    }
+}
+
 TEST(SynthesizerTests, SynthesizerSystemTestSingleThread) {
-    constexpr int inputSamples = 64;
-    constexpr int outputSamples = 63;
+    // Same input and output rate: one audio sample per input sample (after
+    // the initial silence of the audio buffer)
+    const std::vector<int16_t> silent = renderSingleThread(true);
+    const std::vector<int16_t> signal = renderSingleThread(false);
+
+    ASSERT_EQ(silent.size(), signal.size());
+    EXPECT_NEAR((double)signal.size(), SystemTestBlocks * SystemTestBlockSize, 2.0);
+
+    // No input, no sound (no air noise, no jitter)
+    for (int16_t v : silent) EXPECT_EQ(v, 0);
+
+    // A varying input is heard
+    int nonZero = 0;
+    for (int16_t v : signal) if (v != 0) ++nonZero;
+    EXPECT_GT(nonZero, (int)signal.size() / 2);
+}
+
+TEST(SynthesizerTests, SynthesizerSystemTest) {
+    // The rendering thread gives the same audio as rendering in this thread
+    const std::vector<int16_t> reference = renderSingleThread(false);
 
     Synthesizer synth;
     setupSynchronizedSynthesizer(synth);
+    setUnitImpulseResponses(synth, 8);
+    synth.startAudioRenderingThread();
 
-    int16_t *output = new int16_t[outputSamples];
-    int totalSamples = 0;
-
-    for (int i = 0; i < inputSamples;) {
-        for (int j = 0; j < 16; ++j, ++i) {
-            const double v = (double)i;
+    std::vector<int16_t> output;
+    int16_t block[2048];
+    for (int i = 0; i < SystemTestBlocks * SystemTestBlockSize;) {
+        for (int j = 0; j < SystemTestBlockSize; ++j, ++i) {
+            const double v = rampInput(i, false);
             const double data[] = { v, v, v, v, v, v, v, v };
             synth.writeInput(data);
         }
 
         synth.endInputBlock();
-        synth.renderAudio();
+        synth.waitProcessed();
 
-        totalSamples += synth.readAudioOutput(16, output + totalSamples);
-        int a = 0;
+        const int n = synth.readAudioOutput(2048, block);
+        output.insert(output.end(), block, block + n);
     }
 
-    const int rem = synth.readAudioOutput(outputSamples - totalSamples, output + totalSamples);
-
-    EXPECT_EQ(rem, outputSamples - totalSamples);
-
-    for (int i = 0; i < 16; ++i) {
-        EXPECT_EQ(output[i], 0);
-    }
-
-    for (int i = 16; i < outputSamples; ++i) {
-        EXPECT_EQ(output[i], (i - 16) * 10 * 8);
-    }
-
-    synth.destroy();
-    delete[] output;
-}
-
-TEST(SynthesizerTests, SynthesizerSystemTest) {
-    constexpr int inputSamples = 1024;
-    constexpr int outputSamples = 1023;
-
-    Synthesizer synth;
-    setupSynchronizedSynthesizer(synth);
-    synth.startAudioRenderingThread();
-
-    int16_t *output = new int16_t[outputSamples];
-    int totalSamples = 0;
-
-    for (int i = 0; i < inputSamples;) {
-        for (int j = 0; j < 16; ++j, ++i) {
-            const double v = (double)i;
-            const double data[] = { v, v, v, v, v, v, v, v };
-            synth.writeInput(data);
-        }
-
-        const int samplesReturned = synth.readAudioOutput(8, output + totalSamples);
-        totalSamples += samplesReturned;
-    }
-
-    synth.endInputBlock();
-    synth.waitProcessed();
-
-    const int rem = synth.readAudioOutput(outputSamples - totalSamples, output + totalSamples);
-    EXPECT_EQ(rem, outputSamples - totalSamples);
-
-    for (int i = 0; i < 16; ++i) {
-        EXPECT_EQ(output[i], 0);
-    }
-
-    for (int i = 16; i < outputSamples; ++i) {
-        EXPECT_EQ(output[i], std::min(32767, (i - 16) * 10 * 8));
-    }
-
+    // The last block may still be rendering: stop the thread (it finishes
+    // the block) and read the rest
     synth.endAudioRenderingThread();
+    const int n = synth.readAudioOutput(2048, block);
+    output.insert(output.end(), block, block + n);
     synth.destroy();
 
-    delete[] output;
+    ASSERT_EQ(output.size(), reference.size());
+    for (size_t i = 0; i < output.size(); ++i) {
+        EXPECT_EQ(output[i], reference[i]) << "sample " << i;
+    }
 }

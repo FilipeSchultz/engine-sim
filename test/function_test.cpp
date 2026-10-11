@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
 #include "../include/function.h"
+#include "../include/gaussian_filter.h"
 
+#include <cmath>
 #include <stdlib.h>
 
 TEST(FunctionTests, FunctionSanityCheck) {
@@ -57,24 +59,50 @@ TEST(FunctionTests, FunctionRandomAddTest) {
 }
 
 TEST(FunctionTests, FunctionGaussianTest) {
+    // Samples (unordered on purpose)
+    const double x[] = { 0.0, 2.0, 3.0, 1.0, 5.0, 4.0 };
+    const double y[] = { 1.0, 1.0, 5.0, 1.0, 10.0, 9.0 };
+
+    // A filter narrower than the sample spacing returns the samples
+    GaussianFilter narrow;
+    narrow.initialize(4.0, 1.0);
+
     Function f;
-    f.initialize(0, 1.0);
-    f.addSample(0.0, 1.0);
-    f.addSample(2.0, 1.0);
-    f.addSample(3.0, 5.0);
-    f.addSample(1.0, 1.0);
-    f.addSample(5.0, 10.0);
-    f.addSample(4.0, 9.0);
+    f.initialize(0, 1.0, &narrow);
+    for (int i = 0; i < 6; ++i) f.addSample(x[i], y[i]);
 
-    EXPECT_NEAR(f.sampleGaussian(2.0), 1.0, 0.1);
-    EXPECT_NEAR(f.sampleGaussian(4.0), 9.0, 0.3);
-    EXPECT_NEAR(f.sampleGaussian(100.0), 10.0, 1E-3);
-    EXPECT_NEAR(f.sampleGaussian(-100.0), 1.0, 1E-3);
-
-    for (double s = 2.0; s <= 3.0; s += 0.001) {
-        const double v = f.sampleGaussian(s);
-        std::cerr << v << "\n";
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_NEAR(f.sampleGaussian(x[i]), y[i], 1E-3);
     }
 
+    // Beyond the samples: the end values
+    EXPECT_NEAR(f.sampleGaussian(100.0), 10.0, 1E-3);
+    EXPECT_NEAR(f.sampleGaussian(-100.0), 1.0, 1E-3);
     f.destroy();
+
+    // Default filter (alpha 1, radius 3 x the filter radius): the weighted
+    // average with w(d) = exp(-d^2) - exp(-9)
+    Function g;
+    g.initialize(0, 1.0);
+    for (int i = 0; i < 6; ++i) g.addSample(x[i], y[i]);
+
+    for (double s : { 2.0, 2.5, 4.0 }) {
+        double sum = 0, weights = 0;
+        for (int i = 0; i < 6; ++i) {
+            const double d = x[i] - s;
+            const double w = std::fmax(std::exp(-d * d) - std::exp(-9.0), 0.0);
+            sum += w * y[i];
+            weights += w;
+        }
+        EXPECT_NEAR(g.sampleGaussian(s), sum / weights, 1E-3);
+    }
+
+    // Smooth and bounded between the samples
+    for (double s = 2.0; s <= 3.0; s += 0.001) {
+        const double v = g.sampleGaussian(s);
+        EXPECT_GE(v, 1.0);
+        EXPECT_LE(v, 10.0);
+    }
+
+    g.destroy();
 }

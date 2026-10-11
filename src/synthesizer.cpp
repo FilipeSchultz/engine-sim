@@ -248,9 +248,18 @@ void Synthesizer::renderAudio() {
         m_filters[i].jitterFilter.setJitterScale(m_audioParameters.inputSampleNoise);
     }
 
+    // Rendered without the lock, written to the audio buffer with it: the
+    // buffer is read by readAudioOutput() from another thread
+    m_renderOutput.resize(n);
     for (int i = 0; i < n; ++i) {
-        m_audioBuffer.write(renderAudio(i));
+        m_renderOutput[i] = renderAudio(i);
     }
+
+    lk0.lock();
+    for (int i = 0; i < n; ++i) {
+        m_audioBuffer.write(m_renderOutput[i]);
+    }
+    lk0.unlock();
 
     m_cv0.notify_one();
 }

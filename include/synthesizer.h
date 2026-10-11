@@ -14,6 +14,7 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <vector>
 
 class Synthesizer {
     public:
@@ -116,6 +117,7 @@ class Synthesizer {
 
         std::mutex m_inputLock;
         std::mutex m_lock0;
+        std::vector<int16_t> m_renderOutput;    // samples of one renderAudio() call
         std::condition_variable m_cv0;
 
         ProcessingFilters *m_filters;

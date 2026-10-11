@@ -104,19 +104,27 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlow) {
         units::celcius(25.0)
     );
 
+    // Lower pressure in system 1: the flow is negative (into system 1) and
+    // carries the energy per mol of system 2, where it comes from
     const double maxFlowIn = system1.pressureEquilibriumMaxFlow(&system2);
+    EXPECT_LT(maxFlowIn, 0.0);
 
-    system1.loseN(maxFlowIn, system1.kineticEnergyPerMol());
-    system2.gainN(maxFlowIn, system1.kineticEnergyPerMol(), system1.mix());
+    const double E_in = system2.kineticEnergyPerMol();
+    system2.loseN(-maxFlowIn, E_in);
+    system1.gainN(-maxFlowIn, E_in, system2.mix());
 
     EXPECT_NEAR(system1.pressure(), system2.pressure(), 1E-6);
 
+    // Higher pressure in system 1: positive flow out of it, with its own
+    // energy per mol
     system1.changePressure(units::pressure(100.0, units::atm));
 
     const double maxFlowOut = system1.pressureEquilibriumMaxFlow(&system2);
+    EXPECT_GT(maxFlowOut, 0.0);
 
-    system1.loseN(maxFlowIn, system1.kineticEnergyPerMol());
-    system2.gainN(maxFlowIn, system1.kineticEnergyPerMol(), system1.mix());
+    const double E_out = system1.kineticEnergyPerMol();
+    system1.loseN(maxFlowOut, E_out);
+    system2.gainN(maxFlowOut, E_out, system1.mix());
 
     EXPECT_NEAR(system1.pressure(), system2.pressure(), 1E-6);
 }
@@ -132,10 +140,12 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlowInfinite) {
     constexpr double P_env = units::pressure(2.0, units::atm);
     constexpr double T_env = units::celcius(25.0);
 
+    // Negative: flow into the system, from the environment
     const double maxFlow = system1.pressureEquilibriumMaxFlow(P_env, T_env);
     const double E_k_per_mol = GasSystem::kineticEnergyPerMol(T_env, system1.degreesOfFreedom());
+    EXPECT_LT(maxFlow, 0.0);
 
-    system1.gainN(maxFlow, E_k_per_mol);
+    system1.gainN(-maxFlow, E_k_per_mol);
 
     EXPECT_NEAR(system1.pressure(), P_env, 1E-6);
 }
@@ -151,9 +161,11 @@ TEST(GasSystemTests, PressureEquilibriumMaxFlowInfiniteOverpressure) {
     constexpr double P_env = units::pressure(2.0, units::atm);
     constexpr double T_env = units::celcius(25.0);
 
+    // Positive: flow out of the system, with its own energy per mol
     const double maxFlow = system1.pressureEquilibriumMaxFlow(P_env, T_env);
+    EXPECT_GT(maxFlow, 0.0);
 
-    system1.loseN(maxFlow, GasSystem::kineticEnergyPerMol(T_env, 5));
+    system1.loseN(maxFlow, system1.kineticEnergyPerMol());
 
     EXPECT_NEAR(system1.pressure(), P_env, 1E-6);
 }
