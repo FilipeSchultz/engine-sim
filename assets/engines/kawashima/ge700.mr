@@ -1,0 +1,348 @@
+import "engine_sim.mr"
+
+// Kawashima GE 700: stationary single cylinder engine, 212 cc class
+// (Predator 212 / Honda GX200 family), air cooled, OHV, converted to port
+// injection with the virtual ECU. Made to develop the ECU and the bench
+// software, not to match the engine exactly.
+//
+// Data sheet (Kawashima / CCM do Brasil, codes 56-00200 / 210 / 280):
+//   bore x stroke 70 x 55 mm, 212 cc, compression ratio 8.5:1
+//   7 HP max, 12 N m @ 2500 rpm, nominal speed 3600 rpm
+//   fuel consumption 395 g/kWh (carburettor), 15.3 kg
+//   shaft turns counter-clockwise seen from the shaft end
+//
+// Bench conversion: throttle body of a Honda CG (~25 mm), injector of a
+// Honda Pop 110i.
+//
+// Model, full load with the ECU (datasets/ge700.dcm): 16 N m at 1500 rpm,
+// 14.5 N m at 2500, 11.4 N m (4.3 kW) at 3600; free idle ~1550 rpm at the
+// plate stop (MAP ~48 kPa, lambda 0.9).
+//
+// ESTIMATED, to be replaced by measurements (marked "estimate" below):
+// connecting rod and piston, cam timing and lift, port flow, flywheel
+// inertia, friction, intake and exhaust volumes, injector flow and dead
+// time, spark advance of the original magneto.
+
+units units()
+constants constants()
+impulse_response_library ir_lib()
+
+private node wires {
+    output wire1: ignition_wire();
+}
+
+private node ge700_camshaft {
+    input intake_lobe_profile;
+    input exhaust_lobe_profile;
+    input intake_lobe_center;
+    input exhaust_lobe_center;
+    input base_radius: 12 * units.mm;
+
+    output intake_cam: _intake_cam;
+    output exhaust_cam: _exhaust_cam;
+
+    camshaft_parameters params(
+        advance: 0.0 * units.deg,
+        base_radius: base_radius
+    )
+
+    camshaft _intake_cam(params, lobe_profile: intake_lobe_profile)
+    camshaft _exhaust_cam(params, lobe_profile: exhaust_lobe_profile)
+
+    label rot360(360 * units.deg)
+
+    // Overlap TDC at 360 deg, firing TDC at 0 / 720 deg
+    _exhaust_cam.add_lobe(rot360 - exhaust_lobe_center)
+    _intake_cam.add_lobe(rot360 + intake_lobe_center)
+}
+
+private node ge700_head {
+    input intake_camshaft;
+    input exhaust_camshaft;
+    input chamber_volume;
+    input flip_display: false;
+    alias output __out: head;
+
+    // Port flow [CFM @ 28 inH2O] vs lift [thou] (estimate: stock 212 cc /
+    // GX200 class heads flow ~45-50 CFM on the intake)
+    function intake_flow(50 * units.thou)
+    intake_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(50, 15)
+        .add_flow_sample(100, 27)
+        .add_flow_sample(150, 37)
+        .add_flow_sample(200, 44)
+        .add_flow_sample(250, 48)
+
+    function exhaust_flow(50 * units.thou)
+    exhaust_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(50, 13)
+        .add_flow_sample(100, 23)
+        .add_flow_sample(150, 31)
+        .add_flow_sample(200, 36)
+        .add_flow_sample(250, 39)
+
+    generic_cylinder_head head(
+        chamber_volume: chamber_volume,
+        // Throttle body manifold and port (estimate)
+        intake_runner_volume: 60.0 * units.cc,
+        intake_runner_cross_section_area: circle_area(12.5 * units.mm),
+        exhaust_runner_volume: 40.0 * units.cc,
+        exhaust_runner_cross_section_area: circle_area(11.0 * units.mm),
+
+        intake_port_flow: intake_flow,
+        exhaust_port_flow: exhaust_flow,
+        valvetrain: standard_valvetrain(
+            intake_camshaft: intake_camshaft,
+            exhaust_camshaft: exhaust_camshaft
+        ),
+        flip_display: flip_display
+    )
+}
+
+public node kawashima_ge700 {
+    input compression_ratio: 8.5;
+
+    // Original magneto (no ECU): fixed advance (estimate)
+    input spark_advance: 25 * units.deg;
+
+    alias output __out: engine;
+
+    engine engine(
+        name: "Kawashima GE 700 [1 cyl, 212 cc, EFI]",
+        // Electric start (GE 700-E); for the recoil starter use a short burst
+        starter_torque: 8 * units.Nm,
+        starter_speed: 500 * units.rpm,
+        redline: 3600 * units.rpm,
+        dyno_min_speed: 1000 * units.rpm,
+        dyno_max_speed: 4000 * units.rpm,
+        dyno_hold_step: 100 * units.rpm,
+        // Honda Pop 110i injector (estimate: small motorcycle injectors give
+        // 60-100 cc/min at ~3 bar; measure into a graduated cylinder at the
+        // bench's fuel pressure). datasets/ge700.dcm uses the same values
+        injector_flow: 75.0,
+        injector_dead_time: 0.8,
+        // Port wall film: typical warm port injection values
+        wall_film_fraction: 0.25,
+        wall_film_time_constant: 0.3 * units.sec,
+        // Wideband sensor ~10 cm after the exhaust port (estimate)
+        lambda_sensor_volume: 0.08 * units.L,
+        lambda_sensor_time_constant: 0.1 * units.sec,
+        // Air cooled: the "coolant" is the cylinder head under the spark plug
+        // (CHT) and sets the port wall temperature (wall film). Constant
+        // until the thermal model exists
+        coolant_temperature: (120.0 + 273.15) * units.K,
+        fuel: fuel(
+            // Brazilian gasoline: 27 % ethanol by volume (~28 % by mass).
+            // One "molecule" holds the fuel for 12.5 mol of O2, as the
+            // simulation's chemistry assumes: stoichiometric AFR 13.4
+            name: "Gasoline E27 (Brazil)",
+            molecular_mass: 128.9 * units.g,
+            molecular_afr: 12.5,
+            energy_density: 38.7 * units.kJ / units.g,
+            density: 0.753 * units.kg / units.L,
+            // Small air-cooled engine: crevices and quench leave ~10 % of the
+            // fuel unburned (HC); with the heat transfer as published this
+            // gives the data sheet's torque and fuel consumption
+            max_burning_efficiency: 0.9,
+            burning_efficiency_randomness: 0.05,
+            max_turbulence_effect: 1.0,
+            // About half of E27's ~510 kJ/kg evaporates from the port walls
+            latent_heat: 250 * units.kJ / units.kg
+        ),
+        throttle_gamma: 2.0,
+        // Small OHV wedge chamber with side plug (estimate): CA50 ~8-10 deg
+        // ATDC at the map's full load advance
+        turbulence_ratio: 2.0,
+        flame_model: 2,
+        spark_plug_offset: 0.6,
+        // Small engine: rougher than the CFR
+        cycle_variation: 0.2,
+        gas_model: 1,
+        mixture_nonuniformity: 0.06,
+        wall_heat_transfer: 1.0,
+        // Air cooled: head ~200 C, liner ~150 C, piston ~220 C (estimate)
+        wall_temperature: (190.0 + 273.15) * units.K,
+        hf_gain: 0.01,
+        noise: 0.5,
+        jitter: 0.3,
+        // 1 cylinder: at 3600 rpm this gives 0.54 deg per sample
+        simulation_frequency: 40000
+    )
+
+    wires wires()
+
+    label bore(70.0 * units.mm)
+    label stroke(55.0 * units.mm)
+    // GX200 class rod, ~84 mm centre to centre (estimate)
+    label rod_length(84.0 * units.mm)
+    label compression_height(22 * units.mm)
+    label displacement(constants.pi * bore * bore / 4.0 * stroke)
+
+    // Cast flywheel with magnets and fan, ~2.2 kg, ~165 mm (estimate):
+    // weigh it, or measure the inertia with a run-down test on the bench
+    label crank_mass(2.5 * units.kg)
+    label flywheel_mass(2.2 * units.kg)
+    label flywheel_radius(82 * units.mm)
+
+    crankshaft c0(
+        throw: stroke / 2,
+        flywheel_mass: flywheel_mass,
+        mass: crank_mass,
+        // Bearings, seals, splash lubrication, valve train (estimate; the
+        // pistons' friction comes on top). Calibrate with a run-down test
+        friction_torque: 0.8 * units.Nm,
+        moment_of_inertia:
+            disk_moment_of_inertia(mass: crank_mass, radius: stroke / 2)
+            + disk_moment_of_inertia(mass: flywheel_mass, radius: flywheel_radius),
+        position_x: 0.0,
+        position_y: 0.0,
+        tdc: constants.pi / 2
+    )
+
+    rod_journal rj0(angle: 0.0)
+    c0.add_rod_journal(rj0)
+
+    piston_parameters piston_params(
+        mass: 180 * units.g,
+        compression_height: compression_height,
+        wrist_pin_position: 0.0,
+        displacement: 0.0
+    )
+
+    label rod_mass(130 * units.g)
+    connecting_rod_parameters cr_params(
+        mass: rod_mass,
+        moment_of_inertia: rod_moment_of_inertia(mass: rod_mass, length: rod_length),
+        center_of_mass: 0.0,
+        length: rod_length
+    )
+
+    cylinder_bank_parameters bank_params(
+        bore: bore,
+        deck_height: stroke / 2 + rod_length + compression_height
+    )
+
+    // Honda CG throttle body (~25 mm) on a short manifold; the flow rate
+    // includes the air filter (MAP ~96 kPa at full load, 3600 rpm). Idle air:
+    // the plate stop (no idle circuit), ~1800 rpm free at lambda 1
+    intake intake(
+        plenum_volume: 0.15 * units.L,
+        plenum_cross_section_area: circle_area(12.5 * units.mm),
+        intake_flow_rate: k_carb(18.0),
+        runner_flow_rate: k_carb(50.0),
+        runner_length: 4.0 * units.inch,
+        idle_flow_rate: k_carb(0.0),
+        idle_throttle_plate_position: 0.984,
+        velocity_decay: 0.5,
+        air_temperature: (25.0 + 273.15) * units.K
+    )
+
+    // Short pipe and small muffler (estimate)
+    exhaust_system_parameters es_params(
+        outlet_flow_rate: k_carb(60.0),
+        primary_tube_length: 6.0 * units.inch,
+        primary_flow_rate: k_carb(80.0),
+        velocity_decay: 0.5,
+        volume: 0.8 * units.L
+    )
+
+    exhaust_system exhaust0(
+        es_params,
+        audio_volume: 1.0,
+        impulse_response: ir_lib.mild_exhaust_0_reverb
+    )
+
+    cylinder_bank b0(bank_params, angle: 0 * units.deg)
+    b0.add_cylinder(
+        piston: piston(piston_params, blowby: k_28inH2O(0.02)),
+        connecting_rod: connecting_rod(cr_params),
+        rod_journal: rj0,
+        intake: intake,
+        exhaust_system: exhaust0,
+        ignition_wire: wires.wire1
+    )
+
+    engine.add_cylinder_bank(b0)
+    engine.add_crankshaft(c0)
+
+    // Stock cam (estimate, 212 cc class): ~5.5 mm lift, intake 205 deg at
+    // 0.050 in centred 115 deg ATDC (late closing: torque falls off at low
+    // speed), exhaust 195 deg centred 110 deg BTDC. Measure with a degree
+    // wheel and a dial indicator
+    harmonic_cam_lobe intake_lobe(
+        duration_at_50_thou: 205 * units.deg,
+        gamma: 1.0,
+        lift: 0.217 * units.inch,
+        steps: 100
+    )
+
+    harmonic_cam_lobe exhaust_lobe(
+        duration_at_50_thou: 195 * units.deg,
+        gamma: 1.0,
+        lift: 0.217 * units.inch,
+        steps: 100
+    )
+
+    ge700_camshaft camshaft(
+        intake_lobe_profile: intake_lobe,
+        exhaust_lobe_profile: exhaust_lobe,
+        intake_lobe_center: 115 * units.deg,
+        exhaust_lobe_center: 110 * units.deg
+    )
+
+    b0.set_cylinder_head(
+        ge700_head(
+            chamber_volume: displacement / (compression_ratio - 1),
+            intake_camshaft: camshaft.intake_cam,
+            exhaust_camshaft: camshaft.exhaust_cam
+        )
+    )
+
+    // Samples every filter radius (the curve is sampled with a triangle
+    // filter of that width)
+    function timing_curve(1000 * units.rpm)
+    timing_curve
+        .add_sample(0 * units.rpm, spark_advance)
+        .add_sample(1000 * units.rpm, spark_advance)
+        .add_sample(2000 * units.rpm, spark_advance)
+        .add_sample(3000 * units.rpm, spark_advance)
+        .add_sample(4000 * units.rpm, spark_advance)
+        .add_sample(5000 * units.rpm, spark_advance)
+
+    // Safety limit behind the ECU's rev limiter
+    engine.add_ignition_module(
+        ignition_module(
+            timing_curve: timing_curve,
+            rev_limit: 4300 * units.rpm,
+            limiter_duration: 0.05
+        )
+        .connect_wire(wires.wire1, 0 * units.deg)
+    )
+}
+
+// Stationary engine: the dyno does the work, the "vehicle" is only a load stub
+private node ge700_transmission {
+    alias output __out:
+        transmission(max_clutch_torque: 100 * units.lb_ft)
+        .add_gear(1.0);
+}
+
+private node ge700_vehicle {
+    alias output __out:
+        vehicle(
+            mass: 1000 * units.kg,
+            drag_coefficient: 0.3,
+            cross_sectional_area: (1 * units.m) * (1 * units.m),
+            diff_ratio: 3.0,
+            tire_radius: 0.3 * units.m,
+            rolling_resistance: 200 * units.N
+        );
+}
+
+public node main {
+    set_engine(kawashima_ge700())
+    set_vehicle(ge700_vehicle())
+    set_transmission(ge700_transmission())
+}

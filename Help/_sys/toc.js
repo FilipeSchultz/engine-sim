@@ -38,6 +38,7 @@ window.HELP_TOC = [
       { titulo: 'Parâmetros de combustão', pagina: 'Motores/Parametros_Combustao.html' },
       { titulo: 'Calibrar contra dados reais', pagina: 'Motores/Calibracao_Motor.html' },
       { titulo: 'Motor CFR',              pagina: 'Motores/Motor_CFR.html' },
+      { titulo: 'Motor Kawashima GE 700', pagina: 'Motores/Motor_GE700.html' },
       { titulo: 'Motores disponíveis',    pagina: 'Motores/Motores_Disponiveis.html' }
     ]
   },

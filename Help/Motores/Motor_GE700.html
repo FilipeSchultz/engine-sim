@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Motor Kawashima GE 700</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Motor Kawashima GE 700</h1>
+  <p class="subtitulo">Monocilíndrico estacionário de 212 cm³ convertido para injeção: o motor do banco de motores pequenos</p>
+
+  <table class="ficha">
+    <tr><td>Script</td><td><code>assets/engines/kawashima/ge700.mr</code></td></tr>
+    <tr><td>Dataset da ECU</td><td><code>assets/calibration/datasets/ge700.dcm</code></td></tr>
+    <tr><td>Frequência da simulação</td><td>40 kHz (0,54° por passo a 3600 rpm)</td></tr>
+  </table>
+
+  <p>Feito para desenvolver a ECU e o software do banco, não para reproduzir o motor com exatidão. Família 212 cm³
+     (Predator 212 / Honda GX200), refrigerado a ar, OHV, com corpo de borboleta de Honda CG (~25 mm) e injetor de
+     Honda Pop 110i.</p>
+
+  <h2>Usar</h2>
+  <p><b><code>tools\banco\iniciar_banco.bat</code></b> abre tudo com este motor: o simulador
+     (<code>ENGINE_SIM_SCRIPT=../assets/main_ge700.mr</code>), a ECU virtual com a calibração de trabalho
+     <code>assets/calibration/ge700_banco.dcm</code> (copiada do dataset na primeira vez; o VISION grava nela) e o IndiCom.
+     O motor parte pelo motor de partida (<b>S</b>, <code>ENGINE_SIM_AUTOSTART=3</code> ou o <code>ENGINE_Command</code>
+     do RCS); o freio de correntes parasitas é o dinamômetro padrão.</p>
+  <p>Para voltar ao dataset de fábrica, apague <code>ge700_banco.dcm</code>.</p>
+
+  <h2>Da ficha técnica</h2>
+  <table>
+    <tr><th>Item</th><th>Valor</th></tr>
+    <tr><td>Diâmetro × curso</td><td>70 × 55 mm, 212 cm³</td></tr>
+    <tr><td>Taxa de compressão</td><td>8,5:1</td></tr>
+    <tr><td>Torque / potência</td><td>12 N·m @ 2500 rpm, 7 HP, rotação nominal 3600 rpm</td></tr>
+    <tr><td>Consumo</td><td>395 g/kWh (carburador)</td></tr>
+    <tr><td>Rotação do eixo</td><td>Anti-horária vista pelo eixo</td></tr>
+  </table>
+
+  <h2>Estimado (trocar por medições)</h2>
+  <p>Biela (84 mm) e pistão, comando (levantamento 5,5 mm, admissão 205° a 0,050" centrada a 115°, escape 195° a 110°),
+     vazão dos pórticos, inércia do volante (~2,2 kg, 165 mm), atrito, volumes de admissão e escape, injetor (75 cc/min,
+     0,8 ms), avanço do magneto (25°). Combustível: gasolina brasileira E27 (relação estequiométrica 13,4, 38,7 MJ/kg).</p>
+  <div class="pendente">Medir no motor: biela; tempos e levantamento das válvulas (disco graduado e relógio); peso e
+    diâmetro do volante ou ensaio de desaceleração (inércia e atrito); vazão do injetor na pressão do banco; marcha lenta
+    com o carburador original (rotação e avanço); curva de torque em plena carga no banco.</div>
+
+  <h2>Resultado do modelo (com a ECU e o dataset)</h2>
+  <table>
+    <tr><th>Ponto</th><th>Resultado</th></tr>
+    <tr><td>Plena carga</td><td>16 N·m a 1500 rpm, 14,5 N·m a 2500 rpm, 11,4 N·m (4,3 kW) a 3600 rpm; MAP ~96 kPa a 3600 rpm</td></tr>
+    <tr><td>Marcha lenta (batente da borboleta, sem carga)</td><td>~1550 rpm, MAP ~48 kPa, λ 0,9, partida em 3 de 3 tentativas</td></tr>
+    <tr><td>λ com o dataset</td><td>~1,0 em carga parcial, 0,94–0,95 em plena carga</td></tr>
+  </table>
+
+  <h2>Dataset da ECU</h2>
+  <ul>
+    <li><b>FuelBaseMap</b> a partir do ar aprisionado medido na simulação (rotação × MAP, dinamômetro segurando a
+        rotação), λ 0,9 na marcha lenta, 1,0 em carga parcial e 0,9 em plena carga.</li>
+    <li><b>IgnAdvanceMap</b> perto do MBT em carga (CA50 ~8–10° depois do PMS), mais avanço em carga leve e ~6° de
+        reserva na marcha lenta para o controle de marcha lenta por ponto.</li>
+    <li>Partida: <code>CrankingRpm</code> 650, <code>CrankingFuelFactor</code> 0,85 (o mapa já dá mistura rica na partida,
+        porque a MAP média fica alta), <code>AfterStartTime</code> 3 s. Limitador em 4000 rpm.</li>
+  </ul>
+
+  <div class="aviso">
+    <b>MAP média num monocilíndrico:</b> o <code>InputProcessing</code> faz a média da MAP no ciclo, e num monocilíndrico
+    a pulsação esconde a carga: a 1000 rpm toda a faixa de carga cabe entre ~57 e 100 kPa, e em plena carga entre ~85 e
+    100 kPa. Por isso o eixo de MAP do mapa é denso no alto. Amostrar a MAP num ângulo fixo ou usar alfa-N (borboleta ×
+    rotação) são alternativas a desenvolver na ECU.
+  </div>
+  <div class="aviso">
+    <b>Limitações conhecidas:</b> a marcha lenta é irregular (COV do IMEP ~50 %, gás residual ~23 %), e a rotação de
+    marcha lenta responde pouco ao avanço (~3 rpm/° contra ~25 rpm/° num motor real): na marcha lenta a eficiência do
+    modelo muda só ~7 % entre CA50 36° e 14°, contra ~20 % esperados. A investigar.
+  </div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Scripts de motor &middot; Revisão 0.1</div>
+</body>
+</html>

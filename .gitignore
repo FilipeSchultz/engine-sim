@@ -10,3 +10,6 @@ compile_commands.json
 
 # Blender temporary files
 *.blend1
+
+# Bench working copy of the ECU calibration (tools/banco/iniciar_banco.bat)
+assets/calibration/ge700_banco.dcm

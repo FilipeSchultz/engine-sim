@@ -652,9 +652,16 @@ void EngineSimApplication::loadScript() {
     Transmission *transmission = nullptr;
 
 #ifdef ATG_ENGINE_SIM_PIRANHA_ENABLED
+    // ENGINE_SIM_SCRIPT: another main script (relative to the working
+    // directory, like the default), e.g. ../assets/main_ge700.mr
+    std::string scriptPath = "../assets/main.mr";
+    char scriptEnv[512];
+    const DWORD scriptEnvLength = GetEnvironmentVariableA("ENGINE_SIM_SCRIPT", scriptEnv, sizeof(scriptEnv));
+    if (scriptEnvLength > 0 && scriptEnvLength < sizeof(scriptEnv)) scriptPath = scriptEnv;
+
     es_script::Compiler compiler;
     compiler.initialize();
-    const bool compiled = compiler.compile("../assets/main.mr");
+    const bool compiled = compiler.compile(scriptPath.c_str());
     if (compiled) {
         const es_script::Compiler::Output output = compiler.execute();
         configure(output.applicationSettings);
@@ -678,7 +685,7 @@ void EngineSimApplication::loadScript() {
         std::stringstream errors;
         errors << errorLog.rdbuf();
         const std::string message =
-            "Failed to load ../assets/main.mr\n\n" + errors.str();
+            "Failed to load " + scriptPath + "\n\n" + errors.str();
         MessageBoxA(nullptr, message.c_str(), "Engine Sim - script error", MB_OK | MB_ICONERROR);
 
         if (vehicle != nullptr) delete vehicle;

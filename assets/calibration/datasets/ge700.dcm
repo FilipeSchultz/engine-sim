@@ -1,0 +1,223 @@
+* engine-sim ECU calibration dataset
+* Engine: Kawashima GE 700 (assets/engines/kawashima/ge700.mr), 212 cc, E27
+* Starting point for the bench, made in the simulation: FuelBaseMap from the
+* trapped air measured over speed x MAP (ideal dyno hold), lambda 0.9 at idle,
+* 1.0 at part load and 0.9 at full load; IgnAdvanceMap MBT-like at load with
+* more advance at light load and ~6 deg retard at idle (torque reserve for
+* idle speed control by spark). Injector: Honda Pop 110i, 75 cc/min, 0.8 ms
+* (estimate). MAP is averaged over the cycle: on a single cylinder it hides
+* the pulsation, so full load spans only MAP ~85-101 kPa at low speed.
+
+KONSERVIERUNG_FORMAT 2.0
+
+* --- EngineState
+
+FESTWERT CrankingRpm
+   LANGNAME "Engine speed below which the engine is considered cranking"
+   EINHEIT_W "rpm"
+   WERT 650
+END
+
+* --- RevLimiter
+
+FESTWERT RevLimitRpm
+   LANGNAME "Fuel cut above this engine speed (0 = off)"
+   EINHEIT_W "rpm"
+   WERT 4000
+END
+
+FESTWERT RevLimitHysteresis
+   LANGNAME "Fuel comes back below RevLimitRpm minus this"
+   EINHEIT_W "rpm"
+   WERT 150
+END
+
+* --- LambdaControl
+
+FESTWERT LambdaCtrlEnable
+   LANGNAME "Closed loop lambda control (0 = off)"
+   EINHEIT_W "-"
+   WERT 0
+END
+
+FESTWERT LambdaTarget
+   LANGNAME "Lambda set point"
+   EINHEIT_W "-"
+   WERT 1.0
+END
+
+FESTWERT LambdaCtrlKp
+   LANGNAME "Proportional gain: fuel correction per unit of lambda error"
+   EINHEIT_W "-"
+   WERT 0.2
+END
+
+FESTWERT LambdaCtrlKi
+   LANGNAME "Integral gain: fuel correction per unit of lambda error and second"
+   EINHEIT_W "1/s"
+   WERT 0.5
+END
+
+FESTWERT LambdaCtrlLimit
+   LANGNAME "Maximum fuel correction of the controller (fraction)"
+   EINHEIT_W "-"
+   WERT 0.25
+END
+
+FESTWERT LambdaCtrlStartDelay
+   LANGNAME "Time after start before the controller is enabled"
+   EINHEIT_W "s"
+   WERT 3
+END
+
+* --- FuelControl
+
+FESTWERT EcuFuelEnable
+   LANGNAME "Fuel from FuelBaseMap (0 = engine script mixture)"
+   EINHEIT_W "-"
+   WERT 1
+END
+
+FESTWERT InjectorFlow
+   LANGNAME "Injector static flow"
+   EINHEIT_W "cc/min"
+   WERT 75.0
+END
+
+FESTWERT InjectorDeadTime
+   LANGNAME "Injector dead time"
+   EINHEIT_W "ms"
+   WERT 0.8
+END
+
+KENNFELD FuelBaseMap 16 12
+   LANGNAME "Base injection time (dead time included)"
+   EINHEIT_X "rpm"
+   EINHEIT_Y "kPa"
+   EINHEIT_W "ms"
+   ST/X       800     1000     1200     1400     1600     1800     2000     2250     2500     2750     3000     3200     3400     3600     3800     4200
+   ST/Y 20
+   WERT     2.738    2.738    2.730    2.722    2.713    2.701    2.688    2.710    2.731    2.752    2.773    2.747    2.721    2.695    2.669    2.643
+   ST/Y 30
+   WERT     3.706    3.706    3.695    3.684    3.669    3.651    3.633    3.664    3.696    3.728    3.760    3.721    3.682    3.643    3.604    3.565
+   ST/Y 40
+   WERT     4.675    4.675    4.660    4.645    4.646    4.663    4.680    4.741    4.801    4.862    4.922    4.969    5.015    5.061    5.107    5.153
+   ST/Y 50
+   WERT     5.644    5.644    5.670    5.696    5.784    5.934    6.084    6.209    6.334    6.459    6.584    6.630    6.676    6.722    6.768    6.814
+   ST/Y 60
+   WERT     6.980    6.980    7.231    7.482    7.703    7.895    8.088    8.204    8.320    8.436    8.552    8.601    8.650    8.700    8.749    8.798
+   ST/Y 70
+   WERT     9.285    9.285    9.557    9.828   10.030   10.162   10.293   10.405   10.516   10.628   10.739   10.775   10.810   10.846   10.882   10.917
+   ST/Y 80
+   WERT    11.621   11.621   11.861   12.101   12.251   12.311   12.372   12.442   12.513   12.584   12.655   12.688   12.721   12.754   12.788   12.821
+   ST/Y 85
+   WERT    12.786   12.786   13.052   13.319   13.446   13.434   13.422   13.531   13.641   13.751   13.861   13.855   13.850   13.845   13.839   13.834
+   ST/Y 90
+   WERT    15.523   15.523   15.512   15.501   15.583   15.756   15.930   15.998   16.066   16.134   16.202   16.096   15.990   15.883   15.777   15.670
+   ST/Y 95
+   WERT    18.982   18.982   19.344   19.705   19.895   19.914   19.932   19.897   19.863   19.828   19.794   19.699   19.605   19.510   19.416   19.321
+   ST/Y 100
+   WERT    22.632   22.632   23.022   23.412   23.838   24.299   24.761   24.777   24.792   24.808   24.823   24.471   24.118   23.766   23.413   23.060
+   ST/Y 105
+   WERT    23.686   23.686   24.675   25.664   26.792   28.060   29.327   29.343   29.360   29.376   29.393   28.784   28.176   27.567   26.959   26.350
+END
+
+FESTWERT CrankingFuelFactor
+   LANGNAME "Injection time multiplier while cranking (0 = start on the script mixture)"
+   EINHEIT_W "-"
+   WERT 0.85
+END
+
+FESTWERT AfterStartTime
+   LANGNAME "Time for the cranking factor to fade to 1 once the engine runs"
+   EINHEIT_W "s"
+   WERT 3
+END
+
+KENNLINIE FuelCltCorr 8
+   LANGNAME "Warm-up fuel factor vs coolant temperature"
+   EINHEIT_X "degC"
+   EINHEIT_W "-"
+   ST/X      -40      -20        0       20       40       60       80      100
+   WERT    1.000    1.000    1.000    1.000    1.000    1.000    1.000    1.000
+END
+
+KENNLINIE FuelIatCorr 6
+   LANGNAME "Fuel factor vs intake air temperature"
+   EINHEIT_X "degC"
+   EINHEIT_W "-"
+   ST/X      -20        0       20       40       60       80
+   WERT    1.000    1.000    1.000    1.000    1.000    1.000
+END
+
+* --- IgnitionControl
+
+FESTWERT EcuIgnEnable
+   LANGNAME "Spark advance from IgnAdvanceMap (0 = engine script curve)"
+   EINHEIT_W "-"
+   WERT 1
+END
+
+KENNFELD IgnAdvanceMap 16 12
+   LANGNAME "Base spark advance"
+   EINHEIT_X "rpm"
+   EINHEIT_Y "kPa"
+   EINHEIT_W "deg"
+   ST/X       800     1000     1200     1400     1600     1800     2000     2250     2500     2750     3000     3200     3400     3600     3800     4200
+   ST/Y 20
+   WERT      30.0     30.0     30.3     30.7     31.0     33.3     35.7     38.1     38.5     38.9     39.3     39.7     40.0     40.3     40.7     41.0
+   ST/Y 30
+   WERT      28.0     28.0     28.3     28.7     29.0     31.3     33.7     36.1     36.5     36.9     37.3     37.7     38.0     38.3     38.7     39.0
+   ST/Y 40
+   WERT      26.0     26.0     26.3     26.7     27.0     29.3     31.7     34.1     34.5     34.9     35.3     35.7     36.0     36.3     36.7     37.0
+   ST/Y 50
+   WERT      24.0     24.0     24.3     24.7     25.0     27.3     29.7     32.1     32.5     32.9     33.3     33.7     34.0     34.3     34.7     35.0
+   ST/Y 60
+   WERT      22.0     22.0     22.3     22.7     23.0     25.3     27.7     30.1     30.5     30.9     31.3     31.7     32.0     32.3     32.7     33.0
+   ST/Y 70
+   WERT      24.0     24.0     24.3     24.7     25.0     26.0     27.0     28.1     28.5     28.9     29.3     29.7     30.0     30.3     30.7     31.0
+   ST/Y 80
+   WERT      24.0     24.0     24.3     24.7     25.0     25.3     25.7     26.1     26.5     26.9     27.3     27.7     28.0     28.3     28.7     29.0
+   ST/Y 85
+   WERT      23.0     23.0     23.3     23.7     24.0     24.3     24.7     25.1     25.5     25.9     26.3     26.7     27.0     27.3     27.7     28.0
+   ST/Y 90
+   WERT      22.0     22.0     22.3     22.7     23.0     23.3     23.7     24.1     24.5     24.9     25.3     25.7     26.0     26.3     26.7     27.0
+   ST/Y 95
+   WERT      22.0     22.0     22.3     22.7     23.0     23.3     23.7     24.1     24.5     24.9     25.3     25.7     26.0     26.3     26.7     27.0
+   ST/Y 100
+   WERT      22.0     22.0     22.3     22.7     23.0     23.3     23.7     24.1     24.5     24.9     25.3     25.7     26.0     26.3     26.7     27.0
+   ST/Y 105
+   WERT      22.0     22.0     22.3     22.7     23.0     23.3     23.7     24.1     24.5     24.9     25.3     25.7     26.0     26.3     26.7     27.0
+END
+
+KENNLINIE IgnCltCorr 8
+   LANGNAME "Spark advance added vs coolant temperature"
+   EINHEIT_X "degC"
+   EINHEIT_W "deg"
+   ST/X      -40      -20        0       20       40       60       80      100
+   WERT    0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000
+END
+
+KENNLINIE IgnIatCorr 6
+   LANGNAME "Spark advance added vs intake air temperature"
+   EINHEIT_X "degC"
+   EINHEIT_W "deg"
+   ST/X      -20        0       20       40       60       80
+   WERT    0.000    0.000    0.000    0.000    0.000    0.000
+END
+
+* --- Calibration
+
+FESTWERT CalSaveRequest
+   LANGNAME "Set from 0 to 1 to save the calibration to the DCM file (set back to 0 for the next save)"
+   EINHEIT_W "-"
+   WERT 0
+END
+
+* --- OutputStage
+
+FESTWERT InjectionAngle
+   LANGNAME "Start of injection, degrees before the cylinder's firing TDC (port injection: the fuel waits in the port until the intake valve opens)"
+   EINHEIT_W "deg"
+   WERT 400
+END
