@@ -68,10 +68,12 @@ df_b    = (f_e − f_b) · (1 − exp(−dt / τ)),  τ = λ_T / S_L  queima dos
         Misturas lentas dependem mais disso: g = 0,72 / R, entre 1 e 3 (R abaixo).</li>
     <li><b>Ignição:</b> o núcleo se forma na mistura junto à vela, cuja riqueza varia de ciclo a ciclo:
         φ<sub>vela</sub> = φ · (1 + <code>mixture_nonuniformity</code> · N(0, 1)). A velocidade laminar relativa dela,
-        R = S<sub>L,0</sub>(φ<sub>vela</sub>) · (1 − 2,06·x<sub>r</sub><sup>0,77</sup>) / S<sub>L,0</sub>(1,1) (os termos de
-        mistura e de gás residual da correlação), precisa ser pelo menos 0,37; senão a centelha falha e a carga sai sem
-        queimar. Com 6 a 10 % de gás residual os limites de falha ficam em λ ≈ 0,57–0,59 no rico e 1,4–1,5 no pobre, os de
-        motores de injeção no pórtico (Heywood), com uma transição de alguns centésimos de λ onde parte dos ciclos falha.</li>
+        R = S<sub>L,0</sub>(φ<sub>vela</sub>) · (1 − 1,48·x<sub>r</sub><sup>0,77</sup>) / S<sub>L,0</sub>(1,1) (o termo de
+        mistura da correlação; o gás queimado pesa menos no núcleo que o 2,06 da velocidade laminar, porque turbulência e
+        centelha ajudam), precisa ser pelo menos 0,418; senão a centelha falha e a carga sai sem queimar. Os limites de falha
+        ficam em λ ≈ 0,58 no rico e 1,4–1,5 no pobre com 6 a 10 % de gás residual, e em ~28 % de gás queimado na
+        estequiometria, os de motores de injeção no pórtico, com uma transição de alguns centésimos de λ onde parte dos
+        ciclos falha.</li>
     <li><b>Queima parcial:</b> uma chama ainda acesa quando a válvula de escape abre é apagada pelo escape; o resto da carga
         sai sem queimar (combustão muito tardia ou muito lenta).</li>
     <li><b>Velocidade laminar fora da faixa ajustada</b> (φ 0,8 a 1,5): os expoentes de temperatura e pressão ficam nos

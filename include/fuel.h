@@ -66,7 +66,8 @@ class Fuel {
         // Laminar speed relative to a stoichiometric-rich (phi 1.1),
         // undiluted mixture at the same temperature and pressure: how easily
         // the mixture burns (ignition limits, cycle-to-cycle variation)
-        static double relativeLaminarSpeed(double phi, double burnedFraction);
+        static double relativeLaminarSpeed(
+            double phi, double burnedFraction, double dilutionCoefficient = 2.06);
 
         double laminarBurningVelocity(
             double phi,

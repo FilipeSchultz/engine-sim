@@ -27,10 +27,14 @@ namespace {
 
     // Flame model 2, ignition and cycle-to-cycle variation: the relative
     // laminar speed (Fuel::relativeLaminarSpeed) of the mixture at the plug
-    // decides whether the kernel survives. Below this the spark fails: with
-    // 6-10 % residual gas the misfire limits fall at lambda ~0.57-0.59 rich
-    // and ~1.4-1.5 lean, those of port injection SI engines (Heywood)
-    constexpr double MinIgnitionSpeed = 0.37;
+    // decides whether the kernel survives. Below this the spark fails. The
+    // burned gas weighs less on the kernel than on the laminar speed (the
+    // turbulence and the spark help): with the dilution coefficient and the
+    // threshold below the misfire limits fall at lambda ~0.58 rich and
+    // ~1.4-1.5 lean with 6-10 % residual gas, and at ~28 % burned gas at
+    // stoichiometric, those of port injection SI engines
+    constexpr double IgnitionDilutionCoefficient = 1.48;
+    constexpr double MinIgnitionSpeed = 0.418;
     // ...and the turbulence of slower mixtures varies more from cycle to
     // cycle, relative to stoichiometric with 6 % residual gas
     constexpr double ReferenceSpeed = 0.72;
@@ -307,7 +311,11 @@ void CombustionChamber::ignite() {
             const double phi = m_fuel->getMolecularAfr() / afr;
             const double residual = clamp(1.0 - mix.p_fuel - 4.0 * mix.p_o2);
             const double phiPlug = phi * std::fmax(1.0 + m_mixtureNonuniformity * normalSample(), 0.1);
-            if (Fuel::relativeLaminarSpeed(phiPlug, residual) < MinIgnitionSpeed) return;
+            if (Fuel::relativeLaminarSpeed(phiPlug, residual, IgnitionDilutionCoefficient)
+                < MinIgnitionSpeed)
+            {
+                return;
+            }
 
             relativeSpeed = Fuel::relativeLaminarSpeed(phi, residual);
         }

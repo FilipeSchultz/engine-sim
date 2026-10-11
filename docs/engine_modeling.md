@@ -237,12 +237,12 @@ Mixture sweep (600 rpm WOT, spark 13°):
 
 | λ | 0.50 | 0.55 | 0.60 | 0.65 | 0.70 | **0.88** | 1.01 | 1.25 | 1.43 | 1.55 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| IMEP net [bar] | −0.2 | 2.40 | 4.93 | 6.87 | 8.42 | **8.84** | 8.57 | 7.04 | 4.43 | 2.91 |
-| Misfires [%] | 100 | 67 | 39 | 18 | 1 | 0 | 0 | 4 | 32 | 51 |
-| COV of IMEP [%] | — | 164 | 86 | 50 | 10 | 1 | 3 | 22 | 75 | 116 |
+| IMEP net [bar] | −0.2 | 2.18 | 4.86 | 6.89 | 8.42 | **8.84** | 8.57 | 7.04 | 4.29 | 2.27 |
+| Misfires [%] | 100 | 70 | 40 | 18 | 1 | 0 | 0 | 4 | 35 | 62 |
+| COV of IMEP [%] | — | 175 | 88 | 50 | 10 | 1 | 3 | 22 | 80 | 147 |
 
 Peak torque at λ ≈ 0.85–0.9, −5 % at λ 0.70 and −3 % at λ 1. Half the
-cycles misfire at λ ≈ 0.58 rich and ≈ 1.55 lean (ignition limits of flame
+cycles misfire at λ ≈ 0.58 rich and ≈ 1.5 lean (ignition limits of flame
 model 2); COV passes 10 % below λ 0.70 and above λ ≈ 1.15. EGT peaks near
 λ 1 and rises with spark retard and speed, as in a real engine.
 
@@ -400,12 +400,16 @@ charge entrained by the front and burned:
   relative laminar speed below.
 - Ignition: the kernel forms in the mixture at the plug, whose equivalence
   ratio varies from cycle to cycle, φ_plug = φ · (1 + `mixture_nonuniformity`
-  · N(0, 1)). Its relative laminar speed R = S_L,0(φ_plug) · (1 − 2.06·x_r^0.77)
-  / S_L,0(1.1) (the mixture and residual gas terms of the correlation) must
-  be at least 0.37, else the spark fails and the charge leaves unburned. With
-  6–10 % residual gas this puts the misfire limits at λ ≈ 0.57–0.59 rich and
-  1.4–1.5 lean, those of port injection SI engines (Heywood), with a
-  transition of a few hundredths of λ where some cycles misfire.
+  · N(0, 1)). Its relative laminar speed R = S_L,0(φ_plug) · (1 − 1.48·x_r^0.77)
+  / S_L,0(1.1) (the mixture term of the correlation; the burned gas weighs
+  less on the kernel than the 2.06 of the laminar speed, as turbulence and
+  spark help) must be at least 0.418, else the spark fails and the charge
+  leaves unburned. This puts the misfire limits at λ ≈ 0.58 rich and
+  1.4–1.5 lean with 6–10 % residual gas and at ~28 % burned gas at
+  stoichiometric, those of port injection SI engines, with a transition of a
+  few hundredths of λ where some cycles misfire. (With 2.06 the dilution
+  limit fell at ~21 %: at part load the engine sat on it, misfiring in turns,
+  and the misfires hid the effect of the spark advance.)
 - Partial burn: a flame still burning when the exhaust valve opens is
   quenched by the blowdown; the rest of the charge leaves unburned (very late
   or very slow combustion).

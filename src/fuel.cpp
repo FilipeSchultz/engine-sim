@@ -77,14 +77,16 @@ double Fuel::turbulentFlameSpeed(
     return m_turbulenceToFlameSpeedRatio->sampleTriangle(turbulence / S_L) * S_L;
 }
 
-double Fuel::relativeLaminarSpeed(double phi, double burnedFraction) {
+double Fuel::relativeLaminarSpeed(double phi, double burnedFraction, double dilutionCoefficient) {
     // Mixture terms of laminarBurningVelocity(phi, ...) over their value at
-    // phi 1.1 without residual gas
+    // phi 1.1 without residual gas (the dilution term 1 - 2.06 x^0.77 of the
+    // correlation, or another coefficient)
     constexpr double phi_m = 1.21;
     constexpr double B_m = 30.5, B_phi = -54.9;
     const double reference = B_m + B_phi * (1.1 - phi_m) * (1.1 - phi_m);
     const double S_L_0 = B_m + B_phi * (phi - phi_m) * (phi - phi_m);
-    const double dilution = 1.0 - 2.06 * std::pow(std::fmax(burnedFraction, 0.0), 0.77);
+    const double dilution =
+        1.0 - dilutionCoefficient * std::pow(std::fmax(burnedFraction, 0.0), 0.77);
 
     return std::fmax(S_L_0 * dilution / reference, 0.0);
 }
