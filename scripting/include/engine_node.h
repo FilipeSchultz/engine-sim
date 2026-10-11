@@ -130,6 +130,9 @@ namespace es_script {
             ccParams.CycleVariation = m_cycleVariation;
             ccParams.GasModel = m_gasModel;
             ccParams.MixtureNonuniformity = m_mixtureNonuniformity;
+            ccParams.WallFilmFraction = m_wallFilmFraction;
+            ccParams.WallFilmTimeConstant = m_wallFilmTimeConstant;
+            ccParams.CoolantTemperature = m_parameters.coolantTemperature;
 
             for (int i = 0; i < engine->getCylinderCount(); ++i) {
                 ccParams.Piston = engine->getPiston(i);
@@ -180,6 +183,11 @@ namespace es_script {
             addInput("noise", &m_parameters.initialNoise);
             addInput("injector_flow", &m_parameters.injectorFlow_ccmin);
             addInput("injector_dead_time", &m_parameters.injectorDeadTime_ms);
+            addInput("wall_film_fraction", &m_wallFilmFraction);
+            addInput("wall_film_time_constant", &m_wallFilmTimeConstant);
+            addInput("coolant_temperature", &m_parameters.coolantTemperature);
+            addInput("lambda_sensor_volume", &m_parameters.lambdaSensorVolume);
+            addInput("lambda_sensor_time_constant", &m_parameters.lambdaSensorTimeConstant);
             addInput("turbulence_ratio", &m_turbulenceRatio);
             addInput("wall_heat_transfer", &m_wallHeatTransfer);
             addInput("wall_temperature", &m_wallTemperature);
@@ -212,6 +220,8 @@ namespace es_script {
         double m_cycleVariation = 0.0;      // flame model 2: std. deviation of the turbulence per cycle
         int m_gasModel = 0;                 // 0 = constant gamma, 1 = variable heat capacities + rich chemistry
         double m_mixtureNonuniformity = 0.1;    // gas model 1: std. deviation of local phi / phi
+        double m_wallFilmFraction = 0.0;        // port injection: fraction deposited on the walls (90 C, 100 kPa)
+        double m_wallFilmTimeConstant = 0.3;    // port injection: film evaporation time constant [s] (90 C, 100 kPa)
         std::vector<CrankshaftNode *> m_crankshafts;
         std::vector<CylinderBankNode *> m_cylinderBanks;
     };

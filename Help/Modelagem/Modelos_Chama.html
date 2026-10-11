@@ -63,8 +63,20 @@ df_b    = (f_e − f_b) · (1 − exp(−dt / τ)),  τ = λ_T / S_L  queima dos
         a volume constante pelo modelo de gás.</li>
     <li><b>Gás final:</b> depois que a frente varre 98 % do volume, a carga restante é entranhada em L<sub>I</sub> / S<sub>L</sub>
         (cantos, camadas junto às paredes). Esta é a cauda da combustão.</li>
-    <li><b>Variação ciclo a ciclo:</b> o u' de cada ciclo é multiplicado por (1 + <code>cycle_variation</code> · N(0, 1)),
-        o escoamento na vela quando o núcleo se forma. Núcleos lentos dão ciclos tardios e fracos, como num motor real.</li>
+    <li><b>Variação ciclo a ciclo:</b> o u' de cada ciclo é multiplicado por (1 + g · <code>cycle_variation</code> · N(0, 1)),
+        o escoamento na vela quando o núcleo se forma. Núcleos lentos dão ciclos tardios e fracos, como num motor real.
+        Misturas lentas dependem mais disso: g = 0,72 / R, entre 1 e 3 (R abaixo).</li>
+    <li><b>Ignição:</b> o núcleo se forma na mistura junto à vela, cuja riqueza varia de ciclo a ciclo:
+        φ<sub>vela</sub> = φ · (1 + <code>mixture_nonuniformity</code> · N(0, 1)). A velocidade laminar relativa dela,
+        R = S<sub>L,0</sub>(φ<sub>vela</sub>) · (1 − 2,06·x<sub>r</sub><sup>0,77</sup>) / S<sub>L,0</sub>(1,1) (os termos de
+        mistura e de gás residual da correlação), precisa ser pelo menos 0,37; senão a centelha falha e a carga sai sem
+        queimar. Com 6 a 10 % de gás residual os limites de falha ficam em λ ≈ 0,57–0,59 no rico e 1,4–1,5 no pobre, os de
+        motores de injeção no pórtico (Heywood), com uma transição de alguns centésimos de λ onde parte dos ciclos falha.</li>
+    <li><b>Queima parcial:</b> uma chama ainda acesa quando a válvula de escape abre é apagada pelo escape; o resto da carga
+        sai sem queimar (combustão muito tardia ou muito lenta).</li>
+    <li><b>Velocidade laminar fora da faixa ajustada</b> (φ 0,8 a 1,5): os expoentes de temperatura e pressão ficam nos
+        valores do fim da faixa e o de pressão nunca é positivo (extrapolado, ele fica positivo acima de φ ≈ 1,7 e uma
+        chama rica aceleraria com a pressão).</li>
   </ul>
 
   <div class="aviso">

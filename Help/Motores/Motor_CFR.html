@@ -16,6 +16,7 @@
     <tr><td>Script</td><td><code>assets/engines/cfr/cfr_f1.mr</code></td></tr>
     <tr><td>Dataset da ECU</td><td><code>assets/calibration/datasets/cfr.dcm</code></td></tr>
     <tr><td>Frequência da simulação</td><td>40 kHz</td></tr>
+    <tr><td>Modelos</td><td>Gás 1, chama 2, Hohenberg × 1,0, filme no pórtico, sonda λ com atraso de transporte</td></tr>
   </table>
 
   <p>Monocilíndrico de taxa de compressão variável usado para determinar a octanagem (ASTM D2699 / D2700).
@@ -26,58 +27,82 @@
     <tr><th>Item</th><th>Valor</th></tr>
     <tr><td>Diâmetro × curso</td><td>3,25 in (82,55 mm) × 4,50 in (114,3 mm), 611,7 cm³</td></tr>
     <tr><td>Biela</td><td>10,0 in (254 mm)</td></tr>
-    <tr><td>Taxa de compressão</td><td>Variável, 4:1 a 18:1 (cilindro sobe e desce)</td></tr>
+    <tr><td>Taxa de compressão</td><td>Variável, 4:1 a 18:1 (cilindro sobe e desce). Padrão do script: 8</td></tr>
     <tr><td>Admissão</td><td>Abre 10° depois do PMS, fecha 34° depois do PMI</td></tr>
     <tr><td>Escape</td><td>Abre 40° antes do PMI, fecha 15° depois do PMS</td></tr>
     <tr><td>Rotação</td><td>600 rpm (RON) / 900 rpm (MON), mantida por motor síncrono</td></tr>
     <tr><td>Avanço RON</td><td>13° antes do PMS, fixo</td></tr>
+    <tr><td>Ar de admissão</td><td>52 °C (condição do Argonne no RON)</td></tr>
+    <tr><td>Água da camisa</td><td>100 °C (<code>coolant_temperature</code>: sensor CLT e parede do pórtico)</td></tr>
+    <tr><td>Temperaturas de parede</td><td>Camisa 157 °C, cabeçote 252 °C, pistão 212 °C (estimativa do Argonne); o modelo usa a média 200 °C</td></tr>
   </table>
   <p>Aproximações (sem dados publicados à mão): levantamento de válvulas e vazão dos pórticos, massas e inércias,
-     volumes de admissão e escape.</p>
+     volumes de admissão e escape. O filme no pórtico (x 0,25, τ 0,3 s) é típico da literatura: o CFR real tem carburador.
+     A sonda λ fica no fim do tubo primário do script (0,21 L).</p>
 
-  <h2>Resultado da calibração: 600 rpm, plena carga, taxa 8, avanço 13°, λ 0,91</h2>
+  <h2>Validação: Argonne em condição RON</h2>
+  <p>Pal et al., SAE 2018-01-0187: iso-octano, 600 rpm, ar a 52 °C, taxa 7,55, λ 0,89, curvas de pressão médias e
+     estimativas do GT-Power.</p>
   <table>
-    <tr><th></th><th>Original</th><th>Chama 2, γ = 1,4</th><th>Chama 2 + gás 1</th></tr>
-    <tr><td>Transferência de calor</td><td>100 W/m²K</td><td>Hohenberg × 2,5, 90 °C</td><td>Hohenberg × 1,0, 150 °C</td></tr>
-    <tr><td>Carga fresca / VE</td><td>695 mg / 96 % (ar 25 °C)</td><td>660 mg / 99 % (ar 52 °C)</td><td>710 mg / 107 % (ar 52 °C)</td></tr>
-    <tr><td>Eficiência indicada bruta</td><td>48,7 %</td><td>32,9 %</td><td>34,5 %</td></tr>
-    <tr><td>IMEP líquido</td><td>17,6 bar</td><td>10,1 bar</td><td>11,5 bar</td></tr>
-    <tr><td>COV do IMEP</td><td>—</td><td>1 a 4 %</td><td>2 a 3 %</td></tr>
-    <tr><td>Pmax (média)</td><td>66 bar</td><td>44 bar</td><td>41 bar</td></tr>
-    <tr><td>CA10 / CA50 / CA90</td><td>— / 17 / — °</td><td>1,6 / 16,1 / 29,3 °</td><td>1,8 / 16,3 / 29,2 °</td></tr>
-    <tr><td>Expoente politrópico de compressão (−100 → −40°)</td><td>—</td><td>1,37</td><td>1,33</td></tr>
-    <tr><td>Liberação aparente de calor após a combustão</td><td>—</td><td>≈ −9 J/°</td><td>≈ −0,3 J/°</td></tr>
-    <tr><td>Pico da temperatura média do gás</td><td>—</td><td>—</td><td>≈ 2200 K</td></tr>
+    <tr><th></th><th>Argonne</th><th>Modelo (gás 1, chama 2)</th></tr>
+    <tr><td>Massa aprisionada no fechamento da admissão</td><td>628 mg (6 % de residual)</td><td>615 mg (10 % de residual)</td></tr>
+    <tr><td>Ar fresco</td><td>≈ 549 mg (da linha acima)</td><td>552 mg, VE 83 %</td></tr>
+    <tr><td>Pressão em −100° / PMS (centelha 5° depois do PMS)</td><td>≈ 1,5 / 13,8 bar</td><td>1,48 / 12,3 bar</td></tr>
+    <tr><td>Centelha 5° depois do PMS: Pmax</td><td>26 bar a ≈ 37°</td><td>25,7 bar a 35,7°</td></tr>
+    <tr><td>Centelha 13° antes do PMS: Pmax</td><td>≈ 47 bar a ≈ 12° (com detonação, 50 KU)</td><td>39,7 bar a 19,7° (sem modelo de detonação)</td></tr>
   </table>
-
-  <h3>Varredura de avanço (gás 1, λ 0,91)</h3>
-  <table>
-    <tr><th>Avanço [° antes do PMS]</th><td>3</td><td>8</td><td>13</td><td>18</td><td><b>23</b></td><td>28</td><td>35</td></tr>
-    <tr><th>CA50 [° depois do PMS]</th><td>26,1</td><td>21,1</td><td>16,3</td><td>11,7</td><td><b>7,2</b></td><td>2,7</td><td>−3,1</td></tr>
-    <tr><th>IMEP líquido [bar]</th><td>10,71</td><td>11,15</td><td>11,46</td><td>11,65</td><td><b>11,71</b></td><td>11,64</td><td>11,37</td></tr>
-    <tr><th>COV do IMEP [%]</th><td>4,5</td><td>3,7</td><td>2,9</td><td>2,1</td><td><b>1,2</b></td><td>0,8</td><td>1,7</td></tr>
-  </table>
-  <p>O MBT fica em ~23° antes do PMS, com CA50 ≈ 7°. A curva de torque é plana em volta (±5° custam &lt; 1 %) e
-     20° de atraso custam ~9 %. O COV cai em direção ao MBT.</p>
-
-  <h3>Varredura de mistura (gás 1, avanço 13°)</h3>
-  <table>
-    <tr><th>λ</th><td>0,70</td><td>0,80</td><td><b>0,85</b></td><td>0,91</td><td>1,01</td><td>1,12</td></tr>
-    <tr><th>IMEP líquido [bar]</th><td>11,10</td><td>11,41</td><td><b>11,48</b></td><td>11,46</td><td>11,12</td><td>10,41</td></tr>
-  </table>
-  <p>Pico em λ ≈ 0,85 a 0,9, −3 % em λ = 1 e −9 % em λ 1,12, como num motor real. Com o modelo de gás original,
-     o torque era plano para todo λ &lt; 1 (combustão limitada só pelo O<sub>2</sub>).</p>
 
   <div class="aviso">
-    <b>Atenção:</b> a VE (107 %) e portanto o IMEP estão no limite alto do esperado para um CFR (IMEP ~9 a 11 bar):
-    não havia vazão de ar medida para calibrar a admissão.
+    <b>Pressão de compressão ~11 % baixa:</b> o expoente politrópico de −100° ao PMS é 1,28 no modelo e ≈ 1,35 na medição.
+    Nos ensaios desse ponto, tirar o blowby sobe o expoente 0,007, a troca de calor muda menos de 0,003 e o reajuste do calor
+    específico do ar (estava 3 % alto a 400 K) somou 0,003. Uma mistura ar–combustível em λ 0,89 tem γ ≈ 1,33 a 400 K e
+    1,30 a 650 K, então 1,35 com perda de calor não é alcançável com taxa 7,55 partindo de 1,5 bar: a diferença não está no
+    modelo de gás. Com taxa 8,2 o modelo dá 1,49 / 13,6 bar. O motor do Argonne provavelmente estava numa taxa efetiva de
+    ~8,2 a 8,3 (a taxa do CFR vem da altura do cilindro; folgas e frestas a deslocam), ou os valores lidos dos gráficos do
+    artigo estão imprecisos. A calibração fica na taxa nominal.
   </div>
-  <div class="pendente">Inclua a vazão de ar medida num CFR real (se disponível) e refaça o passo 1 da calibração.</div>
+
+  <h2>Pontos de operação</h2>
+  <p>Script calibrado: taxa 8, avanço 13° antes do PMS, λ 0,88 (combustível da ECU), 20 s de ciclos por ponto.</p>
+  <table>
+    <tr><th>Ponto</th><th>IMEP líquido</th><th>Pmax</th><th>CA50</th><th>VE</th><th>EGT (ponderada / pórtico)</th><th>COV</th></tr>
+    <tr><td>600 rpm, plena carga</td><td>8,8 bar</td><td>42 bar a 19,4°</td><td>9,4°</td><td>83 %</td><td>834 / 730 °C</td><td>2,0 %</td></tr>
+    <tr><td>600 rpm, pedal 30 %</td><td>5,8 bar</td><td>27 bar</td><td>11,6°</td><td>58 %</td><td>793 / 721 °C</td><td>2,6 %</td></tr>
+    <tr><td>900 rpm, plena carga</td><td>8,7 bar</td><td>38 bar</td><td>11,5°</td><td>79 %</td><td>879 / 776 °C</td><td>1,7 %</td></tr>
+    <tr><td>1200 rpm, plena carga</td><td>8,4 bar</td><td>35 bar</td><td>12,7°</td><td>76 %</td><td>891 / 794 °C</td><td>2,3 %</td></tr>
+  </table>
+
+  <h3>Varredura de avanço (600 rpm, plena carga)</h3>
+  <table>
+    <tr><th>Avanço [° antes do PMS]</th><td>3</td><td><b>13</b></td><td>23</td><td>33</td></tr>
+    <tr><th>CA50 [° depois do PMS]</th><td>19,1</td><td><b>9,4</b></td><td>0,1</td><td>−8,8</td></tr>
+    <tr><th>IMEP líquido [bar]</th><td>8,51</td><td><b>8,82</b></td><td>8,70</td><td>8,19</td></tr>
+    <tr><th>EGT ponderada [°C]</th><td>894</td><td>834</td><td>796</td><td>777</td></tr>
+  </table>
+  <p>MBT em ≈ 13 a 18° antes do PMS, com CA50 ≈ 8 a 10°.</p>
+
+  <h3>Varredura de mistura (600 rpm, plena carga, avanço 13°)</h3>
+  <table>
+    <tr><th>λ</th><td>0,50</td><td>0,55</td><td>0,60</td><td>0,65</td><td>0,70</td><td><b>0,88</b></td><td>1,01</td><td>1,25</td><td>1,43</td><td>1,55</td></tr>
+    <tr><th>IMEP líquido [bar]</th><td>−0,2</td><td>2,40</td><td>4,93</td><td>6,87</td><td>8,42</td><td><b>8,84</b></td><td>8,57</td><td>7,04</td><td>4,43</td><td>2,91</td></tr>
+    <tr><th>Falhas [%]</th><td>100</td><td>67</td><td>39</td><td>18</td><td>1</td><td>0</td><td>0</td><td>4</td><td>32</td><td>51</td></tr>
+    <tr><th>COV do IMEP [%]</th><td>—</td><td>164</td><td>86</td><td>50</td><td>10</td><td>1</td><td>3</td><td>22</td><td>75</td><td>116</td></tr>
+  </table>
+  <p>Torque máximo em λ ≈ 0,85 a 0,9, −5 % em λ 0,70 e −3 % em λ 1. Metade dos ciclos falha em λ ≈ 0,58 no rico e
+     ≈ 1,55 no pobre (limites de ignição do modelo de chama 2); o COV passa de 10 % abaixo de λ 0,70 e acima de λ ≈ 1,15.
+     A EGT tem o pico perto de λ 1 e sobe com atraso de ignição e rotação, como num motor real.</p>
+
+  <div class="pendente">Uma curva de pressão motorada (sem combustão) com a taxa conhecida resolveria a diferença de
+    compressão. Inclua também a vazão de ar medida num CFR real, se disponível, e refaça o passo 1 da calibração.</div>
 
   <h2>Referências</h2>
   <ul>
+    <li>Pal et al., <i>Development of a Virtual CFR Engine Model for Knocking Combustion Analysis</i>,
+        SAE 2018-01-0187 (validação acima).</li>
     <li>Bestel et al., OSTI 1597460 (Pmax ~45 bar com CA50 16°, taxa 7,41).</li>
     <li>Waqas et al., OSTI 1606342 (liberação de calor a 600 rpm, PRF90).</li>
+    <li>Kolodziej &amp; Wallner, <i>Combustion Engines</i> 2017 (condições RON/MON, água a 100 °C).</li>
+    <li>ASTM D2699 / D2700.</li>
   </ul>
 
 </div>

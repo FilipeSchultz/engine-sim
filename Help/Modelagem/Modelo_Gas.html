@@ -22,10 +22,10 @@
   <p>Todos os volumes de gás do motor (admissão, dutos, cilindros, escape) usam um calor específico médio que depende
      da temperatura e da composição. A energia interna por mol, a partir de 0 K, é</p>
 <pre><code>u = ½ R T (a + b T)</code></pre>
-  <p>com a e b médias ponderadas pelas frações molares de três componentes, ajustadas às energias internas tabeladas (JANAF):</p>
+  <p>com a e b médias ponderadas pelas frações molares de três componentes, ajustadas aos dados tabelados (JANAF). O calor específico é c<sub>v</sub> = R (a/2 + b T):</p>
   <table>
     <tr><th>Componente</th><th>a</th><th>b [1/K]</th><th>Verificação</th></tr>
-    <tr><td>Ar (1 O<sub>2</sub> : 3 inerte)</td><td>4,86</td><td>0,00046</td><td>γ 1,40 a 300 K, 1,36 a 700 K</td></tr>
+    <tr><td>Ar (1 O<sub>2</sub> : 3 inerte)</td><td>4,559</td><td>0,000654</td><td>c<sub>v</sub> por mínimos quadrados de 300 a 1000 K (gás não queimado: admissão, compressão, gás final), erro &lt; 1 %: γ 1,40 a 300 K, 1,37 a 700 K. c<sub>v</sub> +11 % a 2500 K (só o ar em excesso de um gás queimado pobre)</td></tr>
     <tr><td>Gás queimado (N<sub>2</sub>, CO<sub>2</sub>, H<sub>2</sub>O)</td><td>4,98</td><td>0,00078</td><td>γ instantâneo ≈ 1,22 a 2500 K</td></tr>
     <tr><td>Vapor de combustível (iso-octano)</td><td>2,0</td><td>0,063</td><td>c<sub>v</sub> ≈ 22 R a 300 K, 42 R a 700 K</td></tr>
   </table>

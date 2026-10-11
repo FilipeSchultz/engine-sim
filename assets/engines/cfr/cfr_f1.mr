@@ -10,6 +10,7 @@ import "engine_sim.mr"
 //                 exhaust opens 40 deg BBDC, closes 15 deg ATDC
 //   speed held by a synchronous motor: 600 rpm (RON) / 900 rpm (MON)
 //   RON spark timing: fixed 13 deg BTDC
+//   jacket coolant: 100 C (RON and MON)
 //
 // Approximations (no published figures at hand): valve lift and port flow,
 // masses and inertias, intake and exhaust volumes. Run it like the real
@@ -115,6 +116,17 @@ public node cfr_f1 {
         // Port injector (datasets/cfr.dcm: InjectorFlow, InjectorDeadTime)
         injector_flow: 400.0,
         injector_dead_time: 1.0,
+        // Port wall film: typical warm port injection values (literature, no
+        // CFR data: the real engine has a carburettor)
+        wall_film_fraction: 0.25,
+        wall_film_time_constant: 0.3 * units.sec,
+        // Wideband sensor at the end of the primary pipe: exhaust runner
+        // 100 cc + 24 in primary of 0.6 in (~110 cc). Response time: replace
+        // with the datasheet t63 of the sensor used
+        lambda_sensor_volume: 0.21 * units.L,
+        lambda_sensor_time_constant: 0.1 * units.sec,
+        // RON / MON tests: jacket coolant at 100 C
+        coolant_temperature: (100.0 + 273.15) * units.K,
         fuel: fuel(
             name: "PRF / iso-octane",
             // Lower heating value of iso-octane (n-heptane: 44.6)
@@ -326,7 +338,4 @@ public node main {
     set_engine(cfr_f1())
     set_vehicle(cfr_vehicle())
     set_transmission(cfr_transmission())
-
-    // Virtual ECU: XCP on Ethernet for ATI VISION (UDP 5555)
-    set_ecu_settings(xcp: true)
 }

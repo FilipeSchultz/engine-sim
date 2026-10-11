@@ -12,6 +12,37 @@
 #include <cmath>
 
 namespace {
+    // Port wall film (x-tau): the evaporation rate relative to the reference
+    // follows the fuel's vapour pressure (Clausius-Clapeyron with the heat of
+    // vaporisation of iso-octane, 35 kJ/mol / R = 4200 K). The time constant
+    // scales with 1 / rate and with the port pressure (diffusion into the
+    // air), the deposited fraction with rate^-0.3: from 90 to 20 C tau grows
+    // x16 and x x2.3, as identified on real engines
+    constexpr double FilmReferenceTemperature = units::celcius(90.0);
+    constexpr double FilmReferencePressure = units::pressure(100.0, units::kPa);
+    constexpr double FilmVaporisationTemperature = 4200.0 * units::K;
+    constexpr double FilmFractionExponent = 0.3;
+    constexpr double MaxFilmFraction = 0.9;
+    constexpr double MinFilmTimeConstant = 0.005;
+
+    // Flame model 2, ignition and cycle-to-cycle variation: the relative
+    // laminar speed (Fuel::relativeLaminarSpeed) of the mixture at the plug
+    // decides whether the kernel survives. Below this the spark fails: with
+    // 6-10 % residual gas the misfire limits fall at lambda ~0.57-0.59 rich
+    // and ~1.4-1.5 lean, those of port injection SI engines (Heywood)
+    constexpr double MinIgnitionSpeed = 0.37;
+    // ...and the turbulence of slower mixtures varies more from cycle to
+    // cycle, relative to stoichiometric with 6 % residual gas
+    constexpr double ReferenceSpeed = 0.72;
+    constexpr double MaxVariationGain = 3.0;
+
+    double normalSample() {
+        // Box-Muller
+        const double u1 = (rand() + 1.0) / (RAND_MAX + 2.0);
+        const double u2 = (rand() + 1.0) / (RAND_MAX + 2.0);
+        return std::sqrt(-2.0 * std::log(u1)) * std::cos(2 * constants::pi * u2);
+    }
+
     // Rich mixture: the O2 oxidises all the fuel partially (CO, H2) instead
     // of part of it completely. Heat released relative to complete combustion
     // of the O2-limited fuel, from the heats of formation per CH2 unit:
@@ -51,6 +82,11 @@ CombustionChamber::CombustionChamber() {
     m_mixtureNonuniformity = 0.0;
     m_sparkPlugOffset = 0.0;
     m_cycleVariation = 0.0;
+    m_wallFilmFraction = 0.0;
+    m_wallFilmTimeConstant = 0.3;
+    m_coolantTemperature = units::celcius(90.0);
+    m_chargeValid = false;
+    m_intakeWasOpen = false;
     m_meanPistonSpeed = 0.0;
     m_piston = nullptr;
     m_head = nullptr;
@@ -76,6 +112,7 @@ CombustionChamber::CombustionChamber() {
     m_intakeFlowRate = 0;
     m_ecuFuelActive = false;
     m_ecuPendingFuel = 0;
+    m_wallFilm = 0;
 
     m_fuel = nullptr;
 }
@@ -97,6 +134,9 @@ void CombustionChamber::initialize(const Parameters &params) {
     m_mixtureNonuniformity = params.MixtureNonuniformity;
     m_sparkPlugOffset = params.SparkPlugOffset;
     m_cycleVariation = params.CycleVariation;
+    m_wallFilmFraction = params.WallFilmFraction;
+    m_wallFilmTimeConstant = params.WallFilmTimeConstant;
+    m_coolantTemperature = params.CoolantTemperature;
     m_meanPistonSpeedToTurbulence = params.MeanPistonSpeedToTurbulence;
 
     m_pistonSpeed = new double[StateSamples];
@@ -222,6 +262,32 @@ bool CombustionChamber::popLitLastFrame() {
     return lit;
 }
 
+void CombustionChamber::injectFuel(double n) {
+    if (!m_ecuFuelActive || n <= 0) return;
+
+    const double x = wallFilmFraction();
+    m_wallFilm += x * n;
+    m_ecuPendingFuel += (1 - x) * n;
+}
+
+double CombustionChamber::wallFilmFraction() const {
+    if (m_wallFilmFraction <= 0) return 0;
+
+    const double rate = std::exp(FilmVaporisationTemperature
+        * (1 / FilmReferenceTemperature - 1 / m_coolantTemperature));
+    return std::fmin(m_wallFilmFraction * std::pow(rate, -FilmFractionExponent), MaxFilmFraction);
+}
+
+double CombustionChamber::wallFilmTimeConstant() const {
+    const double rate = std::exp(FilmVaporisationTemperature
+        * (1 / FilmReferenceTemperature - 1 / m_coolantTemperature));
+    const double portPressure =
+        m_head->getIntake(m_piston->getCylinderIndex())->m_system.pressure();
+    return std::fmax(
+        m_wallFilmTimeConstant * (portPressure / FilmReferencePressure) / rate,
+        MinFilmTimeConstant);
+}
+
 void CombustionChamber::ignite() {
     if (!m_lit) {
         if (m_system.mix().p_fuel == 0) return;
@@ -230,6 +296,21 @@ void CombustionChamber::ignite() {
         const double equivalenceRatio = afr / m_fuel->getMolecularAfr();
         if (equivalenceRatio < 0.5) return;
         else if (equivalenceRatio > 1.9) return;
+
+        // Flame model 2: the kernel forms in the mixture at the plug, whose
+        // equivalence ratio varies from cycle to cycle (mixture
+        // non-uniformity). Too slow a mixture there (rich, lean or diluted
+        // by residual gas): misfire, the charge leaves unburned
+        double relativeSpeed = 1.0;
+        if (m_flameModel == 2) {
+            const GasSystem::Mix &mix = m_system.mix();
+            const double phi = m_fuel->getMolecularAfr() / afr;
+            const double residual = clamp(1.0 - mix.p_fuel - 4.0 * mix.p_o2);
+            const double phiPlug = phi * std::fmax(1.0 + m_mixtureNonuniformity * normalSample(), 0.1);
+            if (Fuel::relativeLaminarSpeed(phiPlug, residual) < MinIgnitionSpeed) return;
+
+            relativeSpeed = Fuel::relativeLaminarSpeed(phi, residual);
+        }
 
         const double idealInert = m_system.mix().p_o2 / 0.7;
         const double dilution = (m_system.mix().p_inert / idealInert) - 1;
@@ -310,12 +391,11 @@ void CombustionChamber::ignite() {
 
             if (m_flameModel == 2 && m_cycleVariation > 0) {
                 // Cycle-to-cycle variation: the flow field at the plug when
-                // the kernel forms (normal sample, Box-Muller)
-                const double u1 = (rand() + 1.0) / (RAND_MAX + 2.0);
-                const double u2 = (rand() + 1.0) / (RAND_MAX + 2.0);
-                const double normal =
-                    std::sqrt(-2.0 * std::log(u1)) * std::cos(2 * constants::pi * u2);
-                m_flameEvent.turbulence *= std::fmax(1.0 + m_cycleVariation * normal, 0.2);
+                // the kernel forms; slow mixtures depend more on it
+                const double gain = clamp(
+                    ReferenceSpeed / std::fmax(relativeSpeed, 1E-3), 1.0, MaxVariationGain);
+                m_flameEvent.turbulence *=
+                    std::fmax(1.0 + gain * m_cycleVariation * normalSample(), 0.2);
             }
 
             m_flameEvent.flameSpeed = unburnedFlameSpeed();
@@ -380,6 +460,13 @@ void CombustionChamber::updateSphericalFlame(double dt, double volume) {
     const double T_u = unburnedTemperature();
     const double n_charge = m_flameEvent.total_n;
     if (p <= 0 || T_u <= 0 || n_charge <= 0) {
+        m_lit = false;
+        return;
+    }
+
+    // A flame still burning when the exhaust valve opens is quenched by the
+    // blowdown: the rest of the charge leaves unburned (partial burn)
+    if (m_exhaustFlowRate > 0) {
         m_lit = false;
         return;
     }
@@ -518,6 +605,13 @@ void CombustionChamber::flow(double dt) {
 
     m_intakeRunnerAndManifold.dissipateExcessVelocity();
 
+    // Wall film: the evaporated fuel joins the fuel waiting in the port
+    if (m_wallFilm > 0) {
+        const double evaporated = m_wallFilm * (1 - std::exp(-dt / wallFilmTimeConstant()));
+        m_wallFilm -= evaporated;
+        m_ecuPendingFuel += evaporated;
+    }
+
     // ECU sequential injection: delivered into the cylinder with the intake
     // charge, after the exhaust valve has closed (during valve overlap it would
     // be scavenged straight into the exhaust)
@@ -580,6 +674,14 @@ void CombustionChamber::flow(double dt) {
     if (std::abs(intakeFlow) > 1E-9 && m_lit) {
         m_lit = false;
     }
+
+    // Intake valve closing: the charge of this cycle
+    const bool intakeOpen = m_intakeFlowRate > 0;
+    if (m_intakeWasOpen && !intakeOpen) {
+        m_chargeMix = m_system.mix();
+        m_chargeValid = true;
+    }
+    m_intakeWasOpen = intakeOpen;
 
     m_exhaustFlow = exhaustFlow;
     m_lastTimestepTotalExhaustFlow += exhaustFlow;

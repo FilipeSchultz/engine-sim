@@ -77,6 +77,18 @@ double Fuel::turbulentFlameSpeed(
     return m_turbulenceToFlameSpeedRatio->sampleTriangle(turbulence / S_L) * S_L;
 }
 
+double Fuel::relativeLaminarSpeed(double phi, double burnedFraction) {
+    // Mixture terms of laminarBurningVelocity(phi, ...) over their value at
+    // phi 1.1 without residual gas
+    constexpr double phi_m = 1.21;
+    constexpr double B_m = 30.5, B_phi = -54.9;
+    const double reference = B_m + B_phi * (1.1 - phi_m) * (1.1 - phi_m);
+    const double S_L_0 = B_m + B_phi * (phi - phi_m) * (phi - phi_m);
+    const double dilution = 1.0 - 2.06 * std::pow(std::fmax(burnedFraction, 0.0), 0.77);
+
+    return std::fmax(S_L_0 * dilution / reference, 0.0);
+}
+
 double Fuel::laminarBurningVelocity(
     double phi,
     double T_unburned,
@@ -86,14 +98,18 @@ double Fuel::laminarBurningVelocity(
     // Metghalchi & Keck (gasoline / indolene) with the temperature and pressure
     // exponents and the residual dilution term from Heywood, eq. 9.37 - 9.38.
     // Unlike laminarBurningVelocity(afr, ...) the correlation gets the
-    // equivalence ratio it was fitted with
+    // equivalence ratio it was fitted with. The exponents are fitted for
+    // phi 0.8 .. 1.5: outside they are held at the end of the range (beyond
+    // ~1.7 the pressure exponent turns positive, a rich flame would get faster
+    // with pressure), and the pressure exponent is kept <= 0
     constexpr double phi_m = 1.21;
     constexpr double B_m = units::distance(30.5, units::cm) / units::sec;
     constexpr double B_phi = -units::distance(54.9, units::cm) / units::sec;
-    constexpr double S_L_min = units::distance(1.0, units::cm) / units::sec;
+    constexpr double S_L_min = units::distance(0.1, units::cm) / units::sec;
 
-    const double alpha = 2.4 - 0.271 * std::pow(phi, 3.51);
-    const double beta = -0.357 + 0.14 * std::pow(phi, 2.77);
+    const double phi_fit = std::fmin(std::fmax(phi, 0.8), 1.5);
+    const double alpha = 2.4 - 0.271 * std::pow(phi_fit, 3.51);
+    const double beta = std::fmin(-0.357 + 0.14 * std::pow(phi_fit, 2.77), 0.0);
 
     const double S_L_0 = B_m + B_phi * (phi - phi_m) * (phi - phi_m);
     const double T_ratio = T_unburned / units::kelvin(298);

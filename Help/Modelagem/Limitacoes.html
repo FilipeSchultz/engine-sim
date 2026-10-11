@@ -17,7 +17,9 @@
     <li><b>Modelos de chama 0 e 1:</b> a chama é um cilindro que para de repente na camisa e no pistão (sem cauda, Pmax
         pontudo), e a variação ciclo a ciclo vem só de <code>burning_efficiency_randomness</code> (COV ~0,1 % quando a
         turbulência passa de <code>max_turbulence_effect</code>). O modelo 2 corrige os dois.</li>
-    <li><b>Sem modelo de detonação</b> (knock).</li>
+    <li><b>Sem modelo de detonação</b> (knock): avanço demais só perde torque.</li>
+    <li>A falha de combustão vem só da mistura junto à vela (rica, pobre, gás residual); energia da centelha, vela suja e
+        filme de combustível na partida a frio não entram.</li>
     <li><b>Só ignição por centelha.</b> Motores diesel são aproximados por uma "centelha" perto do PMS
         (ver <a href="../Motores/Motores_Disponiveis.html">Motores disponíveis</a>).</li>
   </ul>
@@ -30,6 +32,8 @@
     <li>As equações de escoamento (válvulas, borboleta, dutos) mantêm γ = 1,4 e transferem energia interna sem o trabalho
         de escoamento, como no engine-sim original.</li>
     <li>As massas do log de indicação usam a massa molar do ar para todo o gás (como a simulação).</li>
+    <li>O "ar" do engine-sim tem 1 O<sub>2</sub> : 3 inerte (o real tem 3,76): para o mesmo λ a fração molar de combustível
+        fica ~19 % alta e o γ da mistura ~0,01 baixo.</li>
   </ul>
 
   <h2>Geometria e sistemas</h2>
@@ -37,7 +41,10 @@
     <li>Pistão e cabeçote planos (sem bowl, pent-roof ou squish).</li>
     <li>Sem turbocompressor.</li>
     <li>Temperatura das paredes constante; sem modelo térmico do motor. O sensor de temperatura do líquido (CLT) da ECU
-        lê sempre 90 °C.</li>
+        lê o <code>coolant_temperature</code> do script, constante: partida a frio e aquecimento só como pontos
+        estacionários.</li>
+    <li>O combustível que evapora do filme da parede do pórtico esfria a carga como o injetado direto
+        (<code>latent_heat</code>), e não a parede.</li>
   </ul>
 
   <h2>Tempo real</h2>

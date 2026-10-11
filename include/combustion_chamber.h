@@ -42,6 +42,14 @@ class CombustionChamber : public atg_scs::ForceGenerator {
             // rich mixture chemistry and mixture non-uniformity
             int GasModel = 0;
             double MixtureNonuniformity = 0.0;
+
+            // Port injection wall wetting (x-tau): fraction of each pulse
+            // deposited on the port walls and the film's evaporation time
+            // constant at 90 C and 100 kPa (0 = no film). The walls are at
+            // the coolant temperature
+            double WallFilmFraction = 0.0;
+            double WallFilmTimeConstant = 0.3;
+            double CoolantTemperature = units::celcius(90.0);
         };
 
         struct FlameEvent {
@@ -145,15 +153,28 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         // Port injection, driven by the ECU hardware: each injector pulse adds
         // fuel to the port, where it waits until the intake valve opens (and
         // the exhaust valve has closed) and enters with the charge, so none of
-        // it can flow back into the plenum or out of the exhaust
+        // it can flow back into the plenum or out of the exhaust. Part of the
+        // pulse wets the port walls and reaches the port later, as the film
+        // evaporates
         void setEcuFuelControl(bool active) {
             m_ecuFuelActive = active;
-            if (!active) m_ecuPendingFuel = 0;
+            if (!active) m_ecuPendingFuel = m_wallFilm = 0;
         }
-        void injectFuel(double n) { if (m_ecuFuelActive) m_ecuPendingFuel += n; }
+        void injectFuel(double n);
+
+        // Wall film model at the present port conditions
+        double wallFilmFraction() const;
+        double wallFilmTimeConstant() const;
+        double getWallFilm() const { return m_wallFilm; }
+
+        // Charge composition when the intake valve last closed (before
+        // combustion): the exhaust gas of this cycle carries its lambda
+        const GasSystem::Mix &getChargeMix() const { return m_chargeMix; }
+        bool hasCharge() const { return m_chargeValid; }
 
         bool m_ecuFuelActive;
         double m_ecuPendingFuel;    // [mol]
+        double m_wallFilm;          // [mol]
 
     protected:
         double calculateFrictionForce(double v) const;
@@ -184,6 +205,12 @@ class CombustionChamber : public atg_scs::ForceGenerator {
         double m_mixtureNonuniformity;
         double m_sparkPlugOffset;
         double m_cycleVariation;
+        double m_wallFilmFraction;
+        double m_wallFilmTimeConstant;
+        double m_coolantTemperature;
+        GasSystem::Mix m_chargeMix;
+        bool m_chargeValid;
+        bool m_intakeWasOpen;
         FlameGeometry m_flameGeometry;
         double m_meanPistonSpeed;
 

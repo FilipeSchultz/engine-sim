@@ -104,6 +104,11 @@ private node _engine => __engine_sim__engine {
     input mixture_nonuniformity [float];
     input injector_flow [float];
     input injector_dead_time [float];
+    input wall_film_fraction [float];
+    input wall_film_time_constant [float];
+    input coolant_temperature [float];
+    input lambda_sensor_volume [float];
+    input lambda_sensor_time_constant [float];
 
     alias output __out [engine_channel];
 }
@@ -168,6 +173,23 @@ public node engine {
     input injector_flow: 440.0;
     input injector_dead_time: 1.0;
 
+    // Port injection wall wetting (x-tau model): fraction of each injector
+    // pulse deposited on the port walls and the film's evaporation time
+    // constant, at 90 C coolant and 100 kPa manifold pressure. 0 = no film.
+    // Typical warm port injection engine: 0.2 .. 0.3 and 0.2 .. 0.5 s
+    input wall_film_fraction: 0.0;
+    input wall_film_time_constant: 0.3 * units.sec;
+
+    // Coolant temperature (port walls and the ECU's coolant sensor), absolute.
+    // No thermal model yet: constant
+    input coolant_temperature: (90.0 + 273.15) * units.K;
+
+    // Wideband lambda sensor of the ECU: exhaust volume between the exhaust
+    // valves and the sensor (gas transport delay) and the sensor's response
+    // time (t63, see its datasheet)
+    input lambda_sensor_volume: 0.0 * units.L;
+    input lambda_sensor_time_constant: 0.1 * units.sec;
+
     alias output __out [_engine]:
         _engine(
             name: name,
@@ -195,7 +217,12 @@ public node engine {
             gas_model: gas_model,
             mixture_nonuniformity: mixture_nonuniformity,
             injector_flow: injector_flow,
-            injector_dead_time: injector_dead_time
+            injector_dead_time: injector_dead_time,
+            wall_film_fraction: wall_film_fraction,
+            wall_film_time_constant: wall_film_time_constant,
+            coolant_temperature: coolant_temperature,
+            lambda_sensor_volume: lambda_sensor_volume,
+            lambda_sensor_time_constant: lambda_sensor_time_constant
         );
 }
 

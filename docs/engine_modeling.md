@@ -23,6 +23,11 @@ behaviour, so existing engines are unaffected until you set them.
 | `mixture_nonuniformity` | `0.1` | Gas model 1: standard deviation of the local equivalence ratio / mean. ~0.1 for a carburettor or port injection |
 | `wall_heat_transfer` | `0.0` | Multiplier of the Hohenberg wall heat transfer coefficient. `0` = original constant coefficient (100 W/m²K, almost adiabatic). With gas model 1 use the published correlation, `1.0` |
 | `wall_temperature` | `(90 + 273.15) * units.K` | Mean temperature of the combustion chamber surfaces (head, liner, piston crown, valves) |
+| `wall_film_fraction` | `0.0` | Port injection (ECU): fraction of each injector pulse deposited on the port walls at 90 °C coolant and 100 kPa (x of the x-τ model). `0` = no film. Typical warm port injection: 0.2–0.3 — see [section 5](#port-wall-film-wall_film_fraction--0) |
+| `wall_film_time_constant` | `0.3 * units.sec` | Evaporation time constant of the film at 90 °C and 100 kPa (τ). Typical warm: 0.2–0.5 s |
+| `coolant_temperature` | `(90 + 273.15) * units.K` | Port wall temperature (film) and the ECU's coolant sensor. Constant (no thermal model yet) |
+| `lambda_sensor_volume` | `0.0 * units.L` | Exhaust volume between the exhaust valves and the ECU's wideband sensor: sets the gas transport delay — see [section 5](#ecu-lambda-sensor) |
+| `lambda_sensor_time_constant` | `0.1 * units.sec` | Response time (t63) of the wideband sensor, from its datasheet |
 
 ### `fuel(...)`
 
@@ -190,43 +195,55 @@ pressure traces and GT-Power estimates):
 
 | | Argonne | Model (gas model 1, flame model 2) |
 |---|---|---|
-| Trapped mass at IVC | 628 mg (6 % residual) | 593 mg (9.6 % residual) |
-| Fresh air | ≈ 549 mg (from the above) | 553 mg, VE 83 % |
-| Pressure at −100° / TDC (spark 5° ATDC) | ≈ 1.5 / 13.8 bar | 1.48 / 12.2 bar |
-| Spark 5° ATDC: Pmax | 26 bar at ≈ 37° ATDC | 25.7 bar at 36.6° ATDC |
-| Spark 13° BTDC: Pmax | ≈ 47 bar at ≈ 12° ATDC (knocking, 50 KU) | 39.6 bar at 20° ATDC (no knock model) |
+| Trapped mass at IVC | 628 mg (6 % residual) | 615 mg (10 % residual) |
+| Fresh air | ≈ 549 mg (from the above) | 552 mg, VE 83 % |
+| Pressure at −100° / TDC (spark 5° ATDC) | ≈ 1.5 / 13.8 bar | 1.48 / 12.3 bar |
+| Spark 5° ATDC: Pmax | 26 bar at ≈ 37° ATDC | 25.7 bar at 35.7° ATDC |
+| Spark 13° BTDC: Pmax | ≈ 47 bar at ≈ 12° ATDC (knocking, 50 KU) | 39.7 bar at 19.7° ATDC (no knock model) |
 | Wall temperatures | liner 157 °C, head 252 °C, piston 212 °C | 200 °C (one mean value) |
 
-The compression pressure is ~12 % low: the polytropic exponent from −100° to
-TDC is 1.28 in the model and ≈ 1.35 in the measurement (the fuel vapour's heat
-capacity lowers γ of the model's mixture; the CFR's actual compression ratio
-may also differ from its nominal setting).
+The compression pressure is ~11 % low: the polytropic exponent from −100° to
+TDC is 1.28 in the model and ≈ 1.35 in the measurement. Runs at this point:
+without blowby n rises by 0.007, the wall heat transfer changes it by less than
+0.003, and the refit of the air heat capacity (c_v was 3 % high at 400 K) added
+0.003. A fuel–air mixture at λ 0.89 has γ ≈ 1.33 at 400 K and 1.30 at 650 K
+(JANAF), so n ≈ 1.35 with heat losses cannot be reached at CR 7.55 from 1.5 bar
+at −100°: the difference is not in the gas model. At CR 8.2 the model gives
+1.49 / 13.6 bar. Argonne's engine was probably at an effective compression
+ratio of ~8.2–8.3 (the CFR's ratio is set by the cylinder height; clearance and
+crevice volumes move it), or the values read from the paper's plots are off.
+The calibration stays at the nominal ratio; a motored pressure trace at a known
+compression ratio would settle it.
 
-Operating points with the calibrated script (CR 8, spark 13° BTDC, λ 0.88):
+Operating points with the calibrated script (CR 8, spark 13° BTDC, λ 0.88;
+ECU fuel, 20 s of cycles each):
 
 | Point | IMEP net | Pmax | CA50 | VE | EGT (flow weighted / port) | COV |
 |---|---|---|---|---|---|---|
-| 600 rpm WOT | 8.9 bar | 42 bar at 19.5° | 9.5° | 83 % | 810 / 708 °C | 1.2 % |
-| 600 rpm, 30 % pedal | 5.8 bar | 27 bar | 11.8° | 58 % | 771 / 700 °C | 1.9 % |
-| 900 rpm WOT | 8.7 bar | 37 bar | 12.2° | 79 % | 886 / 782 °C | 1.6 % |
-| 1200 rpm WOT | 8.3 bar | 34 bar | 14.1° | 76 % | 905 / 805 °C | 5.0 % |
+| 600 rpm WOT | 8.8 bar | 42 bar at 19.4° | 9.4° | 83 % | 834 / 730 °C | 2.0 % |
+| 600 rpm, 30 % pedal | 5.8 bar | 27 bar | 11.6° | 58 % | 793 / 721 °C | 2.6 % |
+| 900 rpm WOT | 8.7 bar | 38 bar | 11.5° | 79 % | 879 / 776 °C | 1.7 % |
+| 1200 rpm WOT | 8.4 bar | 35 bar | 12.7° | 76 % | 891 / 794 °C | 2.3 % |
 
 Spark sweep (600 rpm WOT): MBT at ≈ 13–18° BTDC, CA50 ≈ 8–10° ATDC.
 
 | Spark [deg BTDC] | 3 | 13 | 23 | 33 |
 |---|---|---|---|---|
-| CA50 [deg ATDC] | 19.3 | 9.5 | 0.2 | −8.6 |
-| IMEP net [bar] | 8.55 | **8.88** | 8.76 | 8.25 |
-| EGT flow weighted [°C] | 899 | 810 | 772 | 754 |
+| CA50 [deg ATDC] | 19.1 | 9.4 | 0.1 | −8.8 |
+| IMEP net [bar] | 8.51 | **8.82** | 8.70 | 8.19 |
+| EGT flow weighted [°C] | 894 | 834 | 796 | 777 |
 
 Mixture sweep (600 rpm WOT, spark 13°):
 
-| λ | 0.69 | **0.88** | 1.00 | 1.36 |
-|---|---|---|---|---|
-| IMEP net [bar] | 8.54 | **8.88** | 8.67 | 6.88 |
-| EGT flow weighted [°C] | 685 | 810 | 844 | 718 |
+| λ | 0.50 | 0.55 | 0.60 | 0.65 | 0.70 | **0.88** | 1.01 | 1.25 | 1.43 | 1.55 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| IMEP net [bar] | −0.2 | 2.40 | 4.93 | 6.87 | 8.42 | **8.84** | 8.57 | 7.04 | 4.43 | 2.91 |
+| Misfires [%] | 100 | 67 | 39 | 18 | 1 | 0 | 0 | 4 | 32 | 51 |
+| COV of IMEP [%] | — | 164 | 86 | 50 | 10 | 1 | 3 | 22 | 75 | 116 |
 
-Peak torque at λ ≈ 0.85–0.9, −4 % at λ 0.69 and −2 % at λ 1; EGT peaks near
+Peak torque at λ ≈ 0.85–0.9, −5 % at λ 0.70 and −3 % at λ 1. Half the
+cycles misfire at λ ≈ 0.58 rich and ≈ 1.55 lean (ignition limits of flame
+model 2); COV passes 10 % below λ 0.70 and above λ ≈ 1.15. EGT peaks near
 λ 1 and rises with spark retard and speed, as in a real engine.
 
 Other references: Bestel et al., OSTI 1597460; Waqas et al., OSTI 1606342
@@ -234,7 +251,8 @@ Other references: Bestel et al., OSTI 1597460; Waqas et al., OSTI 1606342
 
 ## 4. ECU dataset
 
-The virtual ECU reads [assets/calibration/calibration.dcm](../assets/calibration/calibration.dcm)
+The virtual ECU (`ecu-standalone --cal ...`) reads
+[assets/calibration/calibration.dcm](../assets/calibration/calibration.dcm)
 (ASAM DCM, hot reloaded on save). Each engine keeps its own copy in
 `assets/calibration/datasets/<name>.dcm`; copy it over `calibration.dcm` when
 switching engines.
@@ -246,10 +264,11 @@ To create one for a new engine:
    `InjectorFlow`, `InjectorDeadTime`, `CrankingRpm`.
 2. Set `EcuFuelEnable` and `EcuIgnEnable` to 0 (engine runs on the script's
    mixture and timing curve).
-3. Start with `ENGINE_SIM_ECU_LEARN=<output.dcm>` and sweep the operating range
-   (several speeds, slow pedal ramps, steady points). The learner records the
-   script behaviour per map cell and writes the file every 10 s and on exit,
-   with both ECU functions enabled.
+3. Enable the ECU functions and calibrate the base maps on steady points
+   (dyno hold, fixed pedal) with the ECU's datalog or XCP: `FuelBaseMap` from
+   the measured λ against the target (with `LambdaCtrlEnable` = 1,
+   `fuel_corr_lambda` is the factor the cell is missing), `IgnAdvanceMap`
+   from torque (MBT) or knock limit.
 4. Copy the result to `datasets/<name>.dcm` and `calibration.dcm`.
 5. Then tune the corrections (temperature curves, closed loop λ, rev limiter,
    injection angle) as on a real ECU.
@@ -269,11 +288,11 @@ energy per mol, from 0 K, is
     u = ½ R T (a + b T)
 
 with a, b mole-fraction averages of three components, fitted to tabulated
-(JANAF) internal energies:
+(JANAF) data. The heat capacity is c_v = R (a/2 + b T):
 
 | Component | a | b [1/K] | Check |
 |---|---|---|---|
-| air (1 O2 : 3 inert) | 4.86 | 0.00046 | γ 1.40 at 300 K, 1.36 at 700 K |
+| air (1 O2 : 3 inert) | 4.559 | 0.000654 | c_v least squares over 300–1000 K (the unburned gas: intake, compression, end gas), within 1 %: γ 1.40 at 300 K, 1.37 at 700 K. c_v +11 % at 2500 K (only the excess air of a lean burned gas) |
 | burned gas (N2, CO2, H2O) | 4.98 | 0.00078 | instantaneous γ ≈ 1.22 at 2500 K |
 | fuel vapour (iso-octane) | 2.0 | 0.063 | c_v ≈ 22 R at 300 K, 42 R at 700 K |
 
@@ -375,8 +394,80 @@ charge entrained by the front and burned:
 - End gas: once the front has swept 98 % of the volume, the remaining charge
   is entrained over L_I / S_L (corners, near-wall layers). This is the tail.
 - Cycle-to-cycle variation: each cycle's u' is multiplied by
-  (1 + `cycle_variation` · N(0, 1)), the flow at the plug when the kernel forms.
-  Slow kernels give late, weak cycles, as in a real engine.
+  (1 + g · `cycle_variation` · N(0, 1)), the flow at the plug when the kernel
+  forms. Slow kernels give late, weak cycles, as in a real engine. Slow
+  mixtures depend more on it: g = 0.72 / R, between 1 and 3, with R the
+  relative laminar speed below.
+- Ignition: the kernel forms in the mixture at the plug, whose equivalence
+  ratio varies from cycle to cycle, φ_plug = φ · (1 + `mixture_nonuniformity`
+  · N(0, 1)). Its relative laminar speed R = S_L,0(φ_plug) · (1 − 2.06·x_r^0.77)
+  / S_L,0(1.1) (the mixture and residual gas terms of the correlation) must
+  be at least 0.37, else the spark fails and the charge leaves unburned. With
+  6–10 % residual gas this puts the misfire limits at λ ≈ 0.57–0.59 rich and
+  1.4–1.5 lean, those of port injection SI engines (Heywood), with a
+  transition of a few hundredths of λ where some cycles misfire.
+- Partial burn: a flame still burning when the exhaust valve opens is
+  quenched by the blowdown; the rest of the charge leaves unburned (very late
+  or very slow combustion).
+- Laminar speed outside the fitted range (φ 0.8–1.5): the temperature and
+  pressure exponents are held at the end of the range and the pressure
+  exponent is kept ≤ 0 (extrapolated, it turns positive beyond φ ≈ 1.7 and
+  a rich flame would speed up with pressure).
+
+### Port wall film (`wall_film_fraction` > 0)
+
+x-τ model (Aquino, SAE 810494) per cylinder port, for the ECU's port
+injection. Each pulse puts a fraction x on the walls, the rest waits in the
+port for the intake valve as before; the film evaporates with time constant τ
+into the port:
+
+    dm_film/dt = x · ṁ_inj − m_film / τ
+
+In steady state the cylinder gets all the injected fuel; on a step it gets
+(1 − x) at once and the rest over τ (lean on tip-in, rich on tip-out, fuel
+still arriving after a fuel cut). x and τ follow the port conditions, so the
+plant is richer than an x-τ compensation in the ECU with fixed parameters:
+
+- Evaporation rate r ∝ fuel vapour pressure at the wall (coolant)
+  temperature, Clausius-Clapeyron with the heat of vaporisation of
+  iso-octane: r = exp(4200 K · (1/363 K − 1/T)).
+- τ = τ_ref · (p_port / 100 kPa) / r: slower at high manifold pressure
+  (diffusion into the air) and when cold.
+- x = x_ref · r^−0.3, at most 0.9.
+
+From 90 to 20 °C, τ grows ×16 and x ×2.3, the order of magnitude identified
+on real engines (Guzzella & Onder, *Introduction to Modeling and Control of
+Internal Combustion Engine Systems*; Hendricks & Sorenson, SAE 900616). The
+fuel on the walls is logged as `wall_film_mg` in `ENGINE_SIM_ECU_LOG`.
+
+Identifying x_ref and τ_ref on a real engine: at fixed speed and load, with
+closed loop λ off, step the fuel (e.g. FuelBaseMap ×1.1 through XCP or the
+DCM file) and record the command and λ at ≥ 100 Hz. After the transport delay
+and the sensor (see below, identify them first), λ jumps by (1 − x) of the
+step and settles over τ. Repeat over speed × load, warm and cold.
+
+### ECU lambda sensor
+
+The wideband sensor sees the exhaust gas, not the cylinder. The gas pushed out
+of each cylinder is tagged with the O2 and fuel of its charge (taken at intake
+valve closing, so a fuel cut reads air and a misfire its charge λ) and moves
+to the sensor as plug flow: it arrives once `lambda_sensor_volume` more
+exhaust (at the runner's temperature and pressure) has left the cylinders. The
+delay therefore shrinks as 1 / exhaust flow, and between exhaust pulses the
+gas stands still. The gas at the sensor drives a first order response of
+`lambda_sensor_time_constant`, applied to 1 − 1/λ (about linear in the pump
+current: excess O2 lean, O2 demand rich). Range 0.65 to 6.5 (air).
+
+From the injection command to the sensor: injection angle → intake valve
+opening → one cycle in the cylinder → transport → sensor. With several
+cylinders the sensor sees their individual λ in turn, smoothed by its
+response. The true cylinder λ stays in `cylinder_lambda` of
+`ENGINE_SIM_ECU_LOG`.
+
+Identifying the delay and t63 on a real engine: the same fuel step; the time
+from the command to the first λ change minus about one engine cycle is the
+transport delay, and it should scale with 1 / exhaust mass flow over the
+speed × load grid; `lambda_sensor_volume` ≈ delay × exhaust volume flow.
 
 ### Known limits
 
@@ -390,9 +481,18 @@ charge entrained by the front and burned:
   heat capacity fit.
 - The flow rate equations (valves, throttle, pipes) keep γ = 1.4; with gas
   model 0 they transfer internal energy without flow work (see gas model 1).
+- engine-sim's air is 1 O2 : 3 inert (real air 3.76): at a given λ the fuel
+  mole fraction is ~19 % high and γ of the mixture ~0.01 low.
 - No wall heat transfer in the intake and exhaust ports and pipes.
 - Flat piston and head only (no bowl, pent-roof or squish).
-- No knock model.
+- No knock model: too much spark advance only loses torque.
+- Misfire comes only from the mixture at the plug (rich, lean, residual
+  gas); spark energy, plug fouling and wall wetting at cold start are not
+  modelled.
+- No thermal model: `coolant_temperature` is constant, so cold start and
+  warm-up (film, friction, heat loss) are only steady states.
+- The fuel evaporated from the wall film cools the charge like the directly
+  injected fuel (`latent_heat`).
 
 ## 6. Indicating log columns
 

@@ -48,6 +48,16 @@ class Engine : public Part {
             // Port injectors, driven by the ECU
             double injectorFlow_ccmin = 440.0;
             double injectorDeadTime_ms = 1.0;
+
+            // Coolant temperature: port walls (fuel film) and the ECU's
+            // coolant sensor (no thermal model yet: constant)
+            double coolantTemperature = units::celcius(90.0);
+
+            // Wideband lambda sensor: exhaust volume between the exhaust
+            // valves and the sensor (transport delay) and the sensor's
+            // response time (first order, t63)
+            double lambdaSensorVolume = 0.0;
+            double lambdaSensorTimeConstant = 0.1;
         };
 
     public:
@@ -120,6 +130,10 @@ class Engine : public Part {
         double getInjectorFlow_ccmin() const { return m_injectorFlow_ccmin; }
         double getInjectorDeadTime_ms() const { return m_injectorDeadTime_ms; }
 
+        double getCoolantTemperature() const { return m_coolantTemperature; }
+        double getLambdaSensorVolume() const { return m_lambdaSensorVolume; }
+        double getLambdaSensorTimeConstant() const { return m_lambdaSensorTimeConstant; }
+
         virtual Simulator *createSimulator(Vehicle *vehicle, Transmission *transmission);
 
     protected:
@@ -151,6 +165,10 @@ class Engine : public Part {
 
         double m_injectorFlow_ccmin = 440.0;
         double m_injectorDeadTime_ms = 1.0;
+
+        double m_coolantTemperature = units::celcius(90.0);
+        double m_lambdaSensorVolume = 0.0;
+        double m_lambdaSensorTimeConstant = 0.1;
 
         ExhaustSystem *m_exhaustSystems;
         int m_exhaustSystemCount;

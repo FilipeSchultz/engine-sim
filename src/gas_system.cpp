@@ -90,14 +90,18 @@ void GasSystem::setHeatCapacityModel(int model) {
 
 void GasSystem::meanHeatCapacity(const Mix &mix, double *a, double *b) {
     // Mean c_v from 0 K to T as degrees of freedom, f = 2 c_v,mean / R = a + b T,
-    // fitted to tabulated (JANAF) internal energies:
-    //   air:          5.0 at 300 K .. 6.0 at 2500 K (gamma 1.40 at 300 K, 1.36 at 700 K)
+    // so the heat capacity is c_v = R (a / 2 + b T), fitted to tabulated
+    // (JANAF) data:
+    //   air:          c_v least squares over 300 .. 1000 K, the unburned gas
+    //                 range (intake, compression, end gas): within 1 % there,
+    //                 gamma 1.40 at 300 K, 1.37 at 700 K (c_v +11 % at 2500 K,
+    //                 only the excess air of a lean burned gas gets there)
     //   burned gas:   stoichiometric products (N2, CO2, H2O), 5.2 at 300 K ..
     //                 6.9 at 2500 K (instantaneous gamma ~1.22 at 2500 K)
     //   fuel vapour:  iso-octane, c_v ~ 22 R at 300 K, ~42 R at 700 K
     // Fresh air carries 3 mol of inert gas per mol of O2 and the combustion
     // products are inert, so the inert gas beyond that is burned gas.
-    constexpr double a_air = 4.86, b_air = 0.00046;
+    constexpr double a_air = 4.559, b_air = 0.000654;
     constexpr double a_burned = 4.98, b_burned = 0.00078;
     constexpr double a_fuel = 2.0, b_fuel = 0.063;
 
