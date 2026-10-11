@@ -29,7 +29,7 @@
   <table>
     <tr><th>Opção</th><th>Padrão</th><th>Função</th></tr>
     <tr><td><code>CAN_ENABLED</code></td><td>OFF</td>
-        <td>Liga o controle do dinamômetro via CAN (protocolo AVL EMCON, Kvaser CANlib).
+        <td>Liga o controle via CAN (Kvaser CANlib): protocolo do banco de motores pequenos (<code>Dyno_Eddy_Brake.dbc</code>, padrão) ou AVL EMCON.
             Sem esta opção o simulador compila e roda, mas não abre o barramento.</td></tr>
     <tr><td><code>CANLIB_DIR</code></td><td><code>C:/Program Files (x86)/Kvaser/Canlib</code></td>
         <td>Pasta do SDK CANlib. O build falha com mensagem clara se <code>canlib.h</code> ou
@@ -55,7 +55,9 @@ cmake --build . --config Release</code></pre></li>
     <tr><th>Alvo</th><th>O que é</th></tr>
     <tr><td><code>engine-sim-app</code></td><td>O simulador (executável com janela)</td></tr>
     <tr><td><code>engine-sim</code></td><td>Biblioteca da simulação física</td></tr>
+    <tr><td><code>ecu-standalone</code></td><td>A ECU virtual (executável com janela, <code>build\ecu\Release</code>)</td></tr>
     <tr><td><code>engine-sim-ecu</code></td><td>Biblioteca da ECU virtual, sem dependência da simulação (pasta <code>ecu\</code>)</td></tr>
+    <tr><td><code>engine-sim-ecu-link</code></td><td>Interface e protocolo do link com a ECU: a única parte da ECU que o simulador usa</td></tr>
     <tr><td><code>engine-sim-test</code></td><td>Testes (Google Test): sistema de gás, funções, sintetizador e ECU</td></tr>
   </table>
 
@@ -67,7 +69,7 @@ cmake --build . --config Release</code></pre></li>
     <tr><th>Caminho</th><th>Conteúdo</th></tr>
     <tr><td><code>assets\main.mr</code></td><td>Script principal: escolhe o motor e as unidades da tela</td></tr>
     <tr><td><code>assets\engines\</code></td><td>Scripts de motor (<code>.mr</code>)</td></tr>
-    <tr><td><code>assets\calibration\calibration.dcm</code></td><td>Calibração ativa da ECU virtual (recarregada ao salvar)</td></tr>
+    <tr><td><code>assets\calibration\calibration.dcm</code></td><td>Calibração ativa da ECU virtual, aberta pelo <code>ecu-standalone --cal</code> (recarregada ao salvar)</td></tr>
     <tr><td><code>assets\calibration\datasets\</code></td><td>Uma calibração por motor (<code>cfr.dcm</code>, <code>gm_ls.dcm</code>…)</td></tr>
     <tr><td><code>es\</code></td><td>Biblioteca de nós dos scripts (objetos, peças, sons)</td></tr>
   </table>
@@ -99,6 +101,8 @@ main()</code></pre>
     <li>Defina as <a href="Variaveis_Ambiente.html">variáveis de ambiente</a> das funções que vai usar
         (CAN, ECU, indicação) no mesmo prompt. O CAN abre sozinho quando o executável foi compilado
         com <code>CAN_ENABLED=ON</code>; as variáveis só mudam canal, taxa e comportamento.</li>
+    <li>Abra a ECU (<code>build\ecu\Release\ecu-standalone.exe --cal ...</code>, veja
+        <a href="ECU/ECU_Standalone.html">ECU standalone</a>). Sem ela o motor roda só com a mistura e o avanço do script.</li>
     <li>Rode <code>build\Release\engine-sim-app.exe</code>.</li>
     <li>Confira a primeira mensagem no painel de informações: ela informa o estado do CAN, da ECU e da indicação.
         Veja <a href="Operacao/Mensagens.html">Mensagens do sistema</a>.</li>

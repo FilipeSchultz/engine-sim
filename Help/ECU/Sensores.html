@@ -18,19 +18,40 @@
     <tr><td>Interface</td><td><code>ecu/include/ecu/io.h</code>: <code>EcuConfig</code>, <code>EcuInputs</code>, <code>EcuOutputs</code></td></tr>
   </table>
 
-  <p>O <code>EcuHardware</code> é o "ambiente elétrico" da ECU na simulação, como numa bancada HIL. É o único código que
-     conhece o motor e a ECU ao mesmo tempo. Roda uma vez por passo da física, antes da ignição e do escoamento de gás.
-     Na troca de motor, configura a ECU com o número de cilindros e o ângulo do PMS de combustão de cada um.</p>
+  <p>O <code>EcuHardware</code> faz o papel do controlador de I/O da ECU (o microcontrolador de uma bancada real). É o único
+     código que conhece o motor e o link com a ECU. Roda uma vez por passo da física, antes da ignição e do escoamento de
+     gás: lê os sensores, manda uma amostra para a ECU a cada 10 ms e executa o comando dela. Na troca de motor, pega o
+     número de cilindros e o ângulo do PMS de combustão de cada um, usados para injetar no ângulo certo.</p>
 
   <h2>Sensores</h2>
   <table>
     <tr><th>Sensor</th><th>Modelo</th></tr>
-    <tr><td>Virabrequim / comando</td><td>Ângulo do ciclo 0 a 720°, rotação instantânea</td></tr>
-    <tr><td>MAP</td><td>Pressão do plenum, instantânea (a ECU calcula a média por intervalo de ignição)</td></tr>
+    <tr><td>Virabrequim / comando</td><td>Ângulo do ciclo 0 a 720°; a ECU recebe a rotação média do último intervalo de ignição</td></tr>
+    <tr><td>MAP</td><td>Pressão do plenum, média do último intervalo de ignição (calculada pelo controlador de I/O)</td></tr>
     <tr><td>IAT</td><td>Temperatura do gás no plenum, primeira ordem com 2 s</td></tr>
-    <tr><td>CLT</td><td>Constante 90 °C (ainda sem modelo térmico)</td></tr>
+    <tr><td>CLT</td><td><code>coolant_temperature</code> do script do motor, constante (ainda sem modelo térmico)</td></tr>
     <tr><td>TPS</td><td>Abertura da borboleta</td></tr>
-    <tr><td>λ (wideband)</td><td>λ da última combustão, primeira ordem com 0,1 s; 0 até a primeira combustão</td></tr>
+    <tr><td>λ (wideband)</td><td>Gás de escape na posição da sonda, com atraso de transporte e resposta da sonda (abaixo);
+        faixa 0,65 a 6,5 (ar); 0 até o gás de escape chegar nela</td></tr>
+  </table>
+
+  <h3>Sonda λ</h3>
+  <p>A sonda enxerga o gás de escape, não o cilindro. O gás que sai de cada cilindro leva o O<sub>2</sub> e o combustível
+     da carga dele (tomada no fechamento da admissão: um corte de combustível mostra ar, uma falha de combustão o λ da carga)
+     e anda até a sonda como escoamento pistonado: chega depois que mais <code>lambda_sensor_volume</code> de gás de escape
+     saiu dos cilindros. O atraso de transporte cai com 1 / vazão de escape e, entre os pulsos de escape, o gás fica parado.
+     A sonda responde com primeira ordem de <code>lambda_sensor_time_constant</code> (t63 do datasheet), aplicada em
+     1 − 1/λ (aproximadamente linear na corrente de bombeamento).</p>
+  <p>Do comando de injeção até a sonda: ângulo de injeção → abertura da admissão → um ciclo no cilindro → transporte →
+     sonda. Com vários cilindros a sonda vê o λ de cada um em sequência, suavizado pela resposta dela.</p>
+  <table>
+    <tr><th>Parâmetro (nó <code>engine</code>)</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>lambda_sensor_volume</code></td><td><code>0.0 * units.L</code></td>
+        <td>Volume de escape entre as válvulas e a sonda (coletor + tubo até ela)</td></tr>
+    <tr><td><code>lambda_sensor_time_constant</code></td><td><code>0.1 * units.sec</code></td>
+        <td>Tempo de resposta t63 da sonda</td></tr>
+    <tr><td><code>coolant_temperature</code></td><td><code>(90 + 273.15) * units.K</code></td>
+        <td>Temperatura da água: sensor CLT e parede do pórtico (filme de combustível)</td></tr>
   </table>
 
   <h2>Atuadores</h2>
@@ -39,10 +60,47 @@
     <tr><td>Injetores (no pórtico)</td>
         <td>Os injetores do motor (<code>injector_flow</code> [cc/min] e <code>injector_dead_time</code> [ms] no nó
             <code>engine</code> do script): um pulso entrega <code>vazão × (pulso − tempo morto)</code> de combustível no
-            pórtico, onde ele espera a válvula de admissão abrir. <code>InjectorFlow</code> e <code>InjectorDeadTime</code>
+            pórtico, onde ele espera a válvula de admissão abrir. Com <code>wall_film_fraction</code> &gt; 0 parte do pulso
+            molha a parede do pórtico (abaixo). <code>InjectorFlow</code> e <code>InjectorDeadTime</code>
             da calibração devem descrever os mesmos injetores</td></tr>
     <tr><td>Ignição</td><td>Avanço pedido pela ECU, aplicado no lugar da curva do script quando <code>EcuIgnEnable</code> = 1</td></tr>
   </table>
+
+  <h3>Filme de combustível na parede do pórtico</h3>
+  <p>Modelo x-τ (Aquino, SAE 810494) em cada pórtico. Uma fração x de cada pulso vai para a parede; o resto espera a
+     válvula de admissão como antes. O filme evapora com constante de tempo τ e o vapor também entra no cilindro:</p>
+  <pre>dm_filme/dt = x · ṁ_inj − m_filme / τ</pre>
+  <p>Em regime o cilindro recebe todo o combustível injetado. Num degrau recebe (1 − x) na hora e o resto ao longo de τ:
+     empobrece na aceleração, enriquece na desaceleração e continua chegando combustível depois de um corte. x e τ
+     dependem das condições do pórtico, então a planta é mais rica que uma compensação x-τ de parâmetros fixos na ECU:</p>
+  <ul>
+    <li>Taxa de evaporação r proporcional à pressão de vapor do combustível na temperatura da parede (Clausius-Clapeyron,
+        calor de vaporização do iso-octano): r = exp(4200 K · (1/363 K − 1/T)).</li>
+    <li>τ = τ<sub>ref</sub> · (p<sub>pórtico</sub> / 100 kPa) / r: mais lento com MAP alta e com o motor frio.</li>
+    <li>x = x<sub>ref</sub> · r<sup>−0,3</sup>, no máximo 0,9.</li>
+  </ul>
+  <p>De 90 para 20 °C, τ cresce 16× e x 2,3×, a ordem de grandeza identificada em motores reais (Guzzella &amp; Onder;
+     Hendricks &amp; Sorenson, SAE 900616). A massa no filme sai em <code>wall_film_mg</code> no datalog do simulador.</p>
+  <table>
+    <tr><th>Parâmetro (nó <code>engine</code>)</th><th>Padrão</th><th>Descrição</th></tr>
+    <tr><td><code>wall_film_fraction</code></td><td>0 (sem filme)</td>
+        <td>x a 90 °C e 100 kPa. Injeção no pórtico, motor quente: 0,2 a 0,3</td></tr>
+    <tr><td><code>wall_film_time_constant</code></td><td><code>0.3 * units.sec</code></td>
+        <td>τ a 90 °C e 100 kPa. Motor quente: 0,2 a 0,5 s</td></tr>
+  </table>
+
+  <h3>Identificação com dados de bancada</h3>
+  <ol>
+    <li>Rotação e carga fixas (dinamômetro em rotação, pedal fixo), malha fechada de λ desligada.</li>
+    <li>Degrau no combustível (por exemplo <code>FuelBaseMap</code> × 1,1 pelo XCP ou pelo arquivo DCM), gravando comando e
+        λ a pelo menos 100 Hz.</li>
+    <li>Primeiro a sonda: o tempo do comando até a primeira mudança de λ, menos cerca de um ciclo do motor, é o atraso de
+        transporte. Ele deve cair com 1 / vazão de escape na grade rotação × carga;
+        <code>lambda_sensor_volume</code> ≈ atraso × vazão volumétrica de escape. A subida dá o t63.</li>
+    <li>Depois o filme: descontados atraso e sonda, λ salta (1 − x) do degrau e acomoda ao longo de τ. Repita na grade e
+        com o motor frio e quente.</li>
+    <li>Faça o mesmo ensaio no simulador e compare as curvas.</li>
+  </ol>
 
   <div class="aviso">
     <b>Atenção:</b> com <code>EcuFuelEnable</code> = 1 o coletor de admissão só tem ar. O instrumento LAMBDA da tela usa o λ
@@ -50,6 +108,9 @@
   </div>
 
   <div class="pendente">Complete: modelo de bateria (<code>battery_V</code> existe na interface) e planos para modelo térmico do CLT.</div>
+  <div class="pendente">Ajuste <code>wall_film_fraction</code>, <code>wall_film_time_constant</code>,
+    <code>lambda_sensor_volume</code> e <code>lambda_sensor_time_constant</code> com degraus de combustível no motor real
+    (os valores do CFR são da literatura e da geometria do script).</div>
 
 </div>
 <div class="rodape">Volvo Group &middot; PEL CUR &middot; ECU virtual &middot; Revisão 0.1</div>

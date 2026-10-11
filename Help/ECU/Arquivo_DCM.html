@@ -13,15 +13,16 @@
   <p class="subtitulo">Formato ASAM DCM 2.0, recarga ao vivo e um dataset por motor</p>
 
   <table class="ficha">
-    <tr><td>Calibração ativa</td><td><code>assets/calibration/calibration.dcm</code></td></tr>
+    <tr><td>Calibração ativa</td><td>O arquivo passado em <code>--cal</code> ao <code>ecu-standalone</code>; no laboratório,
+        <code>assets/calibration/calibration.dcm</code></td></tr>
     <tr><td>Datasets</td><td><code>assets/calibration/datasets/&lt;motor&gt;.dcm</code></td></tr>
     <tr><td>Código</td><td><code>ecu/src/dcm_file.cpp</code></td></tr>
   </table>
 
   <h2>Recarga ao vivo</h2>
-  <p>O simulador verifica a data de modificação do <code>calibration.dcm</code> a cada 0,5 s. Ao detectar que o arquivo foi
-     salvo, lê, valida e aplica a calibração nova, com o motor funcionando. A mensagem
-     <code>ECU: calibration loaded (...)</code> confirma.</p>
+  <p>A ECU (<code>ecu-standalone</code>) verifica a data de modificação do arquivo de calibração a cada 0,5 s. Ao detectar que
+     o arquivo foi salvo, lê, valida e aplica a calibração nova, com o motor funcionando. A mensagem
+     <code>ECU: calibration loaded (...)</code> aparece na janela da ECU, e a linha <b>Calibration</b> fica verde.</p>
   <p>O arquivo é <b>rejeitado inteiro</b> — e a ECU continua com a calibração anterior — se tiver:</p>
   <ul>
     <li>erro de sintaxe (bloco incompleto, número inválido, falta de <code>END</code>);</li>
@@ -80,8 +81,10 @@ END</code></pre>
     <tr><td><code>cfr.dcm</code></td><td>Waukesha CFR F1 (<code>engines/cfr/cfr_f1.mr</code>)</td><td>40 kHz</td></tr>
     <tr><td><code>gm_ls.dcm</code></td><td>GM LS V8 (<code>engines/atg-video-2/07_gm_ls.mr</code>)</td><td>20 kHz</td></tr>
   </table>
-  <p>Ao trocar de motor, copie o dataset dele sobre <code>calibration.dcm</code>. Para criar um dataset novo, veja
-     <a href="Aprendizado.html">Aprendizado de mapas</a>.</p>
+  <p>Ao trocar de motor, copie o dataset dele sobre <code>calibration.dcm</code>. Para criar um dataset novo, parta do
+     dataset de um motor parecido: ajuste os eixos de rotação dos mapas, <code>InjectorFlow</code>, <code>InjectorDeadTime</code>
+     (iguais ao <code>injector_flow</code> / <code>injector_dead_time</code> do script) e <code>CrankingRpm</code>, e calibre os
+     mapas em pontos estacionários pelo VISION ou pelo datalog (λ medido contra o alvo, avanço pelo torque).</p>
 
   <div class="dica">
     <b>Dica:</b> antes de mexer na calibração de um teste, guarde uma cópia do <code>calibration.dcm</code>.

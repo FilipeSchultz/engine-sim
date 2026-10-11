@@ -32,7 +32,7 @@
 
 std::string EngineSimApplication::s_buildVersion = "0.1.12a";
 
-EngineSimApplication::EngineSimApplication() : m_ecuHost(m_ecu) {
+EngineSimApplication::EngineSimApplication() {
     m_assetPath = "";
 
     m_geometryVertexBuffer = nullptr;
@@ -420,6 +420,7 @@ void EngineSimApplication::run() {
             process(m_engine.GetFrameLength());
         }
 
+        updateDyno(m_engine.GetFrameLength());
         updateCanTransmit();
 
         m_uiManager.update(m_engine.GetFrameLength());
@@ -442,12 +443,6 @@ void EngineSimApplication::run() {
 
 void EngineSimApplication::destroy() {
     m_can.close();
-    m_ecu.stopXcp();
-
-    if (!m_ecuLearnPath.empty()) {
-        saveLearnedCalibration();
-    }
-    m_ecuHost.closeLog();
     m_ecuLinkLog.close();
     m_indicatingLog.close();
     m_indicatingUdp.close();
@@ -500,6 +495,7 @@ void EngineSimApplication::loadEngine(
         m_simulator->setEcuHardware(&m_ecuHardware);
         m_ecuHardware.attach(engine);
         attachIndicating();
+        configureDyno();
     }
 
     if (engine == nullptr || vehicle == nullptr || transmission == nullptr) {
@@ -776,57 +772,11 @@ void EngineSimApplication::initializeAutostart() {
 }
 
 void EngineSimApplication::initializeEcu() {
-    m_ecuHost.setMessageHandler([this](const std::string &text) {
-        if (m_infoCluster != nullptr) m_infoCluster->setLogMessage(text);
-    });
-
-    m_ecuHardware.setEcu(&m_ecu);
-
-    // External ECU: calibration, XCP and datalog are ecu-standalone's
-    if (initializeEcuLink()) return;
-
-    m_ecuHost.openCalibration(m_assetPath + "/calibration/calibration.dcm");
-    initializeXcp();
-
-    m_ecuLearnPath = getEnvironmentString("ENGINE_SIM_ECU_LEARN");
-    if (!m_ecuLearnPath.empty()) {
-        m_ecuHardware.setLearner(&m_ecuLearner);
-        m_ecuLearnSaveTimer = 10.0;
-    }
-
-    // Datalog: every ECU measurement, then plant values the ECU can't see
-    const std::string logPath = getEnvironmentString("ENGINE_SIM_ECU_LOG");
-    if (!logPath.empty()) {
-        m_ecuHost.openLog(logPath,
-            { "intake_afr", "cylinder_lambda", "throttle_percent", "dyno_torque_Nm" });
-    }
-}
-
-void EngineSimApplication::onEcuSettings(const EcuScriptSettings &settings) {
-    // Applied at start-up (initializeXcp); the XCP server can't be restarted
-    // in the same process, so a change on script reload needs a restart
-    if (!m_ecuSettingsLoaded) {
-        m_ecuScriptSettings = settings;
-        m_ecuSettingsLoaded = true;
-        return;
-    }
-
-    const bool before = m_ecuScriptSettings.xcp;
-    m_ecuScriptSettings = settings;
-    if (settings.xcp != before && getEnvironmentString("ENGINE_SIM_XCP").empty()) {
-        m_infoCluster->setLogMessage(
-            "XCP: set_ecu_settings changed, restart the simulator to apply it");
-    }
-}
-
-bool EngineSimApplication::initializeEcuLink() {
-    // set_ecu_settings(link: true, ...) in the script; the environment
-    // overrides it: ENGINE_SIM_ECU_LINK=1 / 0, ENGINE_SIM_ECU_LINK_ADDRESS
-    // (address[:port]), ENGINE_SIM_ECU_LINK_SYNC (lockstep / free)
+    // The ECU is ecu-standalone; the simulator plays its I/O controller.
+    // set_ecu_settings(link_address, link_port, link_sync) in the script; the
+    // environment overrides it: ENGINE_SIM_ECU_LINK_ADDRESS (address[:port]),
+    // ENGINE_SIM_ECU_LINK_SYNC (lockstep / free)
     const EcuScriptSettings &script = m_ecuScriptSettings;
-    const std::string enabled = getEnvironmentString("ENGINE_SIM_ECU_LINK");
-    if (enabled.empty() ? !script.link : enabled != "1") return false;
-
     EcuHardware::LinkSettings settings;
     settings.address = script.linkAddress;
     settings.port = (uint16_t)script.linkPort;
@@ -834,7 +784,7 @@ bool EngineSimApplication::initializeEcuLink() {
     const std::string endpoint = getEnvironmentString("ENGINE_SIM_ECU_LINK_ADDRESS");
     if (!endpoint.empty() && !ecu::link::parseEndpoint(endpoint, &settings.address, &settings.port)) {
         m_infoCluster->setLogMessage("ECU link: invalid address " + endpoint);
-        return false;
+        return;
     }
 
     std::string sync = getEnvironmentString("ENGINE_SIM_ECU_LINK_SYNC");
@@ -844,7 +794,7 @@ bool EngineSimApplication::initializeEcuLink() {
     std::string error;
     if (!m_ecuHardware.openLink(settings, &error)) {
         m_infoCluster->setLogMessage("ECU link: " + error);
-        return false;
+        return;
     }
 
     m_infoCluster->setLogMessage("ECU link: waiting for ecu-standalone on "
@@ -858,113 +808,61 @@ bool EngineSimApplication::initializeEcuLink() {
         m_ecuLinkLog.open(logPath, std::ios::out);
         m_ecuLinkLog << "time_s,link_state,rpm,map_kPa,lambda_sensor,fuel_ecu,injection_ms,"
             "injection_angle_deg,ignition_ecu,advance_deg,intake_afr,cylinder_lambda,"
-            "throttle_percent,dyno_torque_Nm\n";
+            "throttle_percent,dyno_torque_Nm,wall_film_mg\n";
         m_ecuLinkLogTime = m_ecuLinkLogTimer = 0;
     }
-    return true;
 }
 
-void EngineSimApplication::initializeXcp() {
-    // XCP on Ethernet for calibration tools (ATI VISION, CANape...), set in
-    // the script with set_ecu_settings(xcp: true, ...). The environment
-    // overrides it: ENGINE_SIM_XCP=1 / 0, ENGINE_SIM_XCP_ADDRESS (0.0.0.0 =
-    // every interface, 127.0.0.1 = this computer only), ENGINE_SIM_XCP_PORT,
-    // ENGINE_SIM_XCP_CLOCK (sim / real), ENGINE_SIM_XCP_LOG (0..4)
-    const EcuScriptSettings &script = m_ecuScriptSettings;
-    const std::string enabled = getEnvironmentString("ENGINE_SIM_XCP");
-    if (enabled.empty() ? !script.xcp : enabled != "1") return;
-
-    ecu::XcpSettings settings;
-    settings.port = (uint16_t)script.xcpPort;
-    settings.simulatedClock = script.xcpClock != "real";
-
-    std::string address = getEnvironmentString("ENGINE_SIM_XCP_ADDRESS");
-    if (address.empty()) address = script.xcpAddress;
-    if (!address.empty() && !ecu::parseIpv4(address, settings.address)) {
-        m_infoCluster->setLogMessage("XCP: invalid address " + address);
-        return;
-    }
-
-    const std::string port = getEnvironmentString("ENGINE_SIM_XCP_PORT");
-    if (!port.empty()) settings.port = (uint16_t)std::atoi(port.c_str());
-
-    const std::string clock = getEnvironmentString("ENGINE_SIM_XCP_CLOCK");
-    if (!clock.empty()) settings.simulatedClock = clock != "real";
-
-    const std::string logLevel = getEnvironmentString("ENGINE_SIM_XCP_LOG");
-    if (!logLevel.empty()) settings.logLevel = std::atoi(logLevel.c_str());
-
-    m_ecuHost.startXcp(settings);
-}
-
-void EngineSimApplication::saveLearnedCalibration() {
-    int fuelColumns = 0, ignitionColumns = 0;
-    const ecu::CalibrationPage page = m_ecuLearner.buildPage(m_ecu, &fuelColumns, &ignitionColumns);
-
-    std::string error;
-    const std::string comment =
-        "Learned from the engine script behaviour (steady-state points, linear fit\n"
-        "against MAP per RPM column): "
-        + std::to_string(fuelColumns) + " fuel and "
-        + std::to_string(ignitionColumns) + " ignition RPM columns learned\n"
-        "ECU software: " + m_ecu.epk();
-    if (!ecu::writeDcm(m_ecuLearnPath, m_ecu.layout(), page, comment, &error)) {
-        m_infoCluster->setLogMessage("ECU: " + error);
+void EngineSimApplication::onEcuSettings(const EcuScriptSettings &settings) {
+    // Read once: the link is opened at start-up
+    if (!m_ecuSettingsLoaded) {
+        m_ecuScriptSettings = settings;
+        m_ecuSettingsLoaded = true;
     }
 }
 
 void EngineSimApplication::updateEcu(double dt) {
-    if (m_ecuHardware.linkOpen()) {
-        const EcuHardware::LinkState state = m_ecuHardware.linkState();
-        if (state != m_ecuLinkState) {
-            if (state == EcuHardware::LinkState::Connected) {
-                m_infoCluster->setLogMessage("ECU link: ecu-standalone connected");
-            }
-            else if (state == EcuHardware::LinkState::Lost) {
-                m_infoCluster->setLogMessage(
-                    "ECU link: no command for 0.1 s, ECU outputs cut (engine script mixture and timing)");
-            }
+    if (!m_ecuHardware.linkOpen()) return;
+
+    const EcuHardware::LinkState state = m_ecuHardware.linkState();
+    if (state != m_ecuLinkState) {
+        if (state == EcuHardware::LinkState::Connected) {
+            m_infoCluster->setLogMessage("ECU link: ecu-standalone connected");
         }
-        m_ecuLinkState = state;
-
-        if (m_ecuLinkLog.is_open() && m_iceEngine != nullptr) {
-            m_ecuLinkLogTime += dt;
-            m_ecuLinkLogTimer -= dt;
-            if (m_ecuLinkLogTimer <= 0) {
-                m_ecuLinkLogTimer += 0.05;
-                if (m_ecuLinkLogTimer <= 0) m_ecuLinkLogTimer = 0.05;
-
-                const ecu::EcuInputs &in = m_ecuHardware.inputs();
-                const ecu::EcuOutputs &out = m_ecuHardware.outputs();
-                m_ecuLinkLog << m_ecuLinkLogTime << "," << (int)state
-                    << "," << in.rpm << "," << m_ecuHardware.averagedMap_kPa() << "," << in.lambda
-                    << "," << out.fuelControl << "," << out.injection_ms << "," << out.injectionAngle_deg
-                    << "," << out.sparkControl << "," << out.sparkAdvance_deg
-                    << "," << m_iceEngine->getIntakeAfr()
-                    << "," << m_iceEngine->getCylinderLambda()
-                    << "," << m_speedSetting * 100.0
-                    << "," << units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) << "\n";
-            }
-        }
-        return;
-    }
-
-    m_ecuHost.update(dt);
-
-    if (!m_ecuLearnPath.empty()) {
-        m_ecuLearnSaveTimer -= dt;
-        if (m_ecuLearnSaveTimer <= 0) {
-            m_ecuLearnSaveTimer = 10.0;
-            saveLearnedCalibration();
+        else if (state == EcuHardware::LinkState::Lost) {
+            m_infoCluster->setLogMessage(
+                "ECU link: no command for 0.1 s, ECU outputs cut (engine script mixture and timing)");
         }
     }
+    m_ecuLinkState = state;
 
-    if (m_iceEngine != nullptr && m_ecuHost.logDue(dt)) {
-        m_ecuHost.writeLogRow({
-            m_iceEngine->getIntakeAfr(),
-            m_iceEngine->getCylinderLambda(),
-            m_speedSetting * 100.0,
-            units::convert(m_simulator->getFilteredDynoTorque(), units::Nm) });
+    if (m_ecuLinkLog.is_open() && m_iceEngine != nullptr) {
+        m_ecuLinkLogTime += dt;
+        m_ecuLinkLogTimer -= dt;
+        if (m_ecuLinkLogTimer <= 0) {
+            m_ecuLinkLogTimer += 0.05;
+            if (m_ecuLinkLogTimer <= 0) m_ecuLinkLogTimer = 0.05;
+
+            const ecu::EcuInputs &in = m_ecuHardware.inputs();
+            const ecu::EcuOutputs &out = m_ecuHardware.outputs();
+
+            // Fuel on the port walls (wall film model)
+            double wallFilm = 0;
+            for (int i = 0; i < m_iceEngine->getCylinderCount(); ++i) {
+                wallFilm += m_iceEngine->getChamber(i)->getWallFilm();
+            }
+            wallFilm *= m_iceEngine->getFuel()->getMolecularMass();
+
+            m_ecuLinkLog << m_ecuLinkLogTime << "," << (int)state
+                << "," << in.rpm << "," << m_ecuHardware.averagedMap_kPa() << "," << in.lambda
+                << "," << out.fuelControl << "," << out.injection_ms << "," << out.injectionAngle_deg
+                << "," << out.sparkControl << "," << out.sparkAdvance_deg
+                << "," << m_iceEngine->getIntakeAfr()
+                << "," << m_iceEngine->getCylinderLambda()
+                << "," << m_speedSetting * 100.0
+                << "," << units::convert(m_simulator->getFilteredDynoTorque(), units::Nm)
+                << "," << wallFilm * 1e6 << "\n";
+        }
     }
 }
 
@@ -1176,26 +1074,123 @@ void EngineSimApplication::openCan() {
     m_canTorqueFilterTau = getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_FILTER_MS", 50.0) / 1000.0;
     m_canRng.seed(std::random_device()());
 
+    // The bench's protocol (dyno_can.h, Dyno_Eddy_Brake.dbc) unless
+    // ENGINE_SIM_CAN_PROTOCOL=emcon (AVL EMCON, the former RCS link)
+    std::string protocol = getEnvironmentString("ENGINE_SIM_CAN_PROTOCOL");
+    for (char &c : protocol) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    m_canEmcon = protocol == "emcon";
+    m_canTimeoutMs = getEnvironmentInt("ENGINE_SIM_CAN_TIMEOUT_MS", 500);
+
     if (!m_can.open(channel, bitrate)) {
         m_infoCluster->setLogMessage("CAN: " + m_can.getLastError());
         return;
     }
 
-    m_can.setCyclic(
-        avl_emcon::encodeBmeControl(avl_emcon::BmeControl()),
-        avl_emcon::BmeControlPeriodMs);
-    m_can.setCyclic(
-        avl_emcon::encodeBmeActual1(0.0f, 0.0f),
-        avl_emcon::BmeActualPeriodMs);
-    m_can.setCyclic(
-        avl_emcon::encodeBmeActual2(0.0f),
-        avl_emcon::BmeActualPeriodMs,
-        avl_emcon::makeLifesignalWriter());
+    if (m_canEmcon) {
+        m_can.setCyclic(
+            avl_emcon::encodeBmeControl(avl_emcon::BmeControl()),
+            avl_emcon::BmeControlPeriodMs);
+        m_can.setCyclic(
+            avl_emcon::encodeBmeActual1(0.0f, 0.0f),
+            avl_emcon::BmeActualPeriodMs);
+        m_can.setCyclic(
+            avl_emcon::encodeBmeActual2(0.0f),
+            avl_emcon::BmeActualPeriodMs,
+            avl_emcon::makeLifesignalWriter());
+    }
+    else {
+        m_can.setCyclic(
+            dyno_can::encodeMeasure(m_dynoCanBaseId, dyno_can::Measure()),
+            dyno_can::MeasurePeriodMs,
+            dyno_can::makeCounterWriter());
+        if (m_eddyDyno) {
+            m_can.setCyclic(
+                dyno_can::encodeStatus(m_dynoCanBaseId, dyno_can::Status()),
+                dyno_can::StatusPeriodMs);
+        }
+        m_can.setCyclic(
+            dyno_can::encodeEngineStatus(m_dynoCanBaseId, dyno_can::EngineStatus()),
+            dyno_can::EngineStatusPeriodMs);
+    }
 
     m_infoCluster->setLogMessage(
-        "CAN: AVL EMCON on channel " + std::to_string(channel)
+        std::string(m_canEmcon ? "CAN: AVL EMCON" : "CAN: bench protocol (Dyno_Eddy_Brake.dbc)")
+        + " on channel " + std::to_string(channel)
         + " @ " + std::to_string(bitrate / 1000) + " kbit/s");
 #endif /* ATG_ENGINE_SIM_CAN_ENABLED */
+}
+
+void EngineSimApplication::configureDyno() {
+    // The bench's eddy current brake, unless ENGINE_SIM_DYNO_MODEL=ideal (a
+    // dyno that holds the speed and can drive the engine, as the CFR's
+    // synchronous motor). The brake only absorbs torque: the engine has to
+    // start with its starter, and the dyno commands (keyboard, AVL EMCON)
+    // become the set points of the brake's internal controller
+    std::string model = getEnvironmentString("ENGINE_SIM_DYNO_MODEL");
+    for (char &c : model) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    m_eddyDyno = model != "ideal";
+
+    const std::string baseId = getEnvironmentString("ENGINE_SIM_DYNO_CAN_ID");
+    m_dynoCanBaseId = baseId.empty()
+        ? dyno_can::DefaultBaseId
+        : static_cast<uint32_t>(std::strtoul(baseId.c_str(), nullptr, 0));
+
+    if (m_simulator == nullptr || m_iceEngine == nullptr) return;
+    m_simulator->m_dyno.m_eddyCurrent = m_eddyDyno;
+    if (!m_eddyDyno) return;
+
+    EddyCurrentBrake::Parameters params;
+    params.torqueGain = getEnvironmentDouble("ENGINE_SIM_DYNO_BRAKE_GAIN", params.torqueGain);
+    params.rotorInertia = getEnvironmentDouble("ENGINE_SIM_DYNO_ROTOR_INERTIA", params.rotorInertia);
+    params.torqueKp = getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_KP", params.torqueKp);
+    params.torqueTi = getEnvironmentDouble("ENGINE_SIM_DYNO_TORQUE_TI", params.torqueTi);
+    params.speedKp = getEnvironmentDouble("ENGINE_SIM_DYNO_SPEED_KP", params.speedKp);
+    params.speedKi = getEnvironmentDouble("ENGINE_SIM_DYNO_SPEED_KI", params.speedKi);
+    m_simulator->m_brake.configure(params);
+
+    // The brake's rotor turns with the crankshaft
+    Crankshaft *crankshaft = m_iceEngine->getOutputCrankshaft();
+    crankshaft->m_body.I = crankshaft->getMomentOfInertia() + params.rotorInertia;
+
+
+    const std::string logPath = getEnvironmentString("ENGINE_SIM_DYNO_LOG");
+    if (!logPath.empty() && !m_dynoLog.is_open()) {
+        m_dynoLog.open(logPath, std::ios::out);
+        m_dynoLog << "time_s,pwm_source,torque_setpoint_Nm,speed_setpoint_rpm,duty_percent,"
+            "excitation_percent,brake_torque_Nm,load_cell_Nm,speed_measured_rpm,engine_rpm,"
+            "power_W,throttle_percent\n";
+        m_dynoLogTime = m_dynoLogTimer = 0;
+    }
+}
+
+void EngineSimApplication::updateDyno(double dt) {
+    if (!m_eddyDyno || m_simulator == nullptr || m_iceEngine == nullptr) return;
+    const EddyCurrentBrake &brake = m_simulator->m_brake;
+
+    if (brake.isOverPower() != m_dynoOverPower) {
+        m_dynoOverPower = brake.isOverPower();
+        if (m_dynoOverPower) {
+            m_infoCluster->setLogMessage("DYNO: braking power above the brake's rating (6 PS)");
+        }
+    }
+
+    if (!m_dynoLog.is_open()) return;
+    m_dynoLogTime += dt;
+    m_dynoLogTimer -= dt;
+    if (m_dynoLogTimer > 0) return;
+    m_dynoLogTimer += 0.05;
+    if (m_dynoLogTimer <= 0) m_dynoLogTimer = 0.05;
+
+    // 0 = coil off, 1 = internal controller, 2 = DYNO_Command (CAN)
+    const int source = brake.isExternal() ? 2 : (brake.isInternalControl() ? 1 : 0);
+    const Dynamometer &dyno = m_simulator->m_dyno;
+    m_dynoLog << m_dynoLogTime << "," << source
+        << "," << (dyno.m_torqueMode ? units::convert(dyno.m_torqueSetpoint, units::Nm) : 0.0)
+        << "," << (dyno.m_torqueMode ? 0.0 : units::toRpm(std::abs(dyno.m_rotationSpeed)))
+        << "," << brake.duty() * 100.0 << "," << brake.excitation() * 100.0
+        << "," << brake.torque() << "," << brake.measuredTorque()
+        << "," << brake.measuredSpeed_rpm() << "," << std::abs(m_iceEngine->getRpm())
+        << "," << brake.power() << "," << m_speedSetting * 100.0 << "\n";
 }
 
 void EngineSimApplication::updateCanReceive(double dt) {
@@ -1205,20 +1200,61 @@ void EngineSimApplication::updateCanReceive(double dt) {
     while (m_can.read(&frame)) {
         if (frame.extended) continue;
 
-        switch (frame.id) {
-        case avl_emcon::HostControlId:
-            avl_emcon::decodeHostControl(frame, &m_hostControl);
-            break;
-        case avl_emcon::HostDemand1Id:
-            avl_emcon::decodeHostDemand1(frame, &m_hostDemand1);
-            break;
-        case avl_emcon::HostDemand2Id:
-            avl_emcon::decodeHostDemand2(frame, &m_hostDemand2);
-            break;
-        default:
-            break;
+        if (m_canEmcon) {
+            switch (frame.id) {
+            case avl_emcon::HostControlId:
+                avl_emcon::decodeHostControl(frame, &m_hostControl);
+                break;
+            case avl_emcon::HostDemand1Id:
+                avl_emcon::decodeHostDemand1(frame, &m_hostDemand1);
+                break;
+            case avl_emcon::HostDemand2Id:
+                avl_emcon::decodeHostDemand2(frame, &m_hostDemand2);
+                break;
+            default:
+                break;
+            }
+        }
+        else if (frame.id == m_dynoCanBaseId) {
+            // Load demand from the bench automation's controller, linearised
+            // into the coil's PWM
+            dyno_can::Command command;
+            if (m_eddyDyno && dyno_can::decodeCommand(frame, &command)) {
+                EddyCurrentBrake &brake = m_simulator->m_brake;
+                brake.setExternalCommand(brake.dutyForLoad(command.load), command.enable);
+            }
+        }
+        else if (frame.id == m_dynoCanBaseId + 3) {
+            dyno_can::EngineCommand command;
+            if (dyno_can::decodeEngineCommand(frame, &command)) {
+                m_remoteIgnition = command.ignition;
+                m_remoteStarter = command.starter;
+                m_remoteThrottle = command.throttle;
+                m_engineCommandAge = 0.0;
+            }
         }
     }
+
+    if (!m_canEmcon) {
+        // Bench protocol: the automation is in control while ENGINE_Command
+        // keeps coming; when it stops, back to manual in a safe state
+        m_engineCommandAge += dt;
+        const bool active = m_engineCommandAge * 1000.0 <= m_canTimeoutMs;
+        if (m_canRemote && !active) {
+            m_canError = true;
+            m_infoCluster->setLogMessage("CAN: ENGINE_Command STOPPED - BACK TO MANUAL");
+        }
+        else if (active) {
+            m_canError = false;
+        }
+
+        setCanRemote(active);
+        return;
+    }
+
+    m_remoteIgnition = m_hostControl.ignitionKey;
+    m_remoteStarter = m_hostControl.starter;
+    m_remoteThrottle = clamp(m_hostDemand2.alphaDemand_percent / 100.0);
 
     // Reset_Key: rising edge clears a latched fault
     if (m_hostControl.resetKey && !m_canPrevResetKey && m_canError) {
@@ -1253,6 +1289,12 @@ void EngineSimApplication::setCanRemote(bool remote) {
     m_canRemote = remote;
 
     if (remote) {
+        // Bench protocol: the brake only takes DYNO_Command
+        if (!m_canEmcon) {
+            m_simulator->m_dyno.m_enabled = false;
+            m_simulator->m_dyno.m_hold = false;
+        }
+
         m_infoCluster->setLogMessage("CAN: REMOTE CONTROL");
         return;
     }
@@ -1265,6 +1307,9 @@ void EngineSimApplication::setCanRemote(bool remote) {
     m_simulator->m_dyno.m_hold = false;
     m_simulator->m_dyno.m_torqueMode = false;
     m_dynoSpeed = 0.0;
+    if (!m_canEmcon) {
+        m_simulator->getEngine()->getIgnitionModule()->m_enabled = false;
+    }
 
     if (!m_canError) {
         m_infoCluster->setLogMessage("CAN: MANUAL CONTROL");
@@ -1273,6 +1318,46 @@ void EngineSimApplication::setCanRemote(bool remote) {
 
 void EngineSimApplication::updateCanTransmit() {
     if (!m_can.isOpen() || m_iceEngine == nullptr) return;
+
+    if (!m_canEmcon) {
+        // Bench protocol: brake measurements and the engine's state
+        dyno_can::Measure measure;
+        if (m_eddyDyno) {
+            const EddyCurrentBrake &brake = m_simulator->m_brake;
+            measure.torque_Nm = brake.measuredTorque();
+            measure.speed_rpm = brake.measuredSpeed_rpm();
+            measure.power_W = brake.power();
+            measure.external = brake.isExternal();
+            measure.timeout = brake.isExternalTimedOut();
+            measure.overPower = brake.isOverPower();
+            measure.internalControl = brake.isInternalControl();
+
+            dyno_can::Status status;
+            status.duty = brake.duty();
+            status.load = brake.loadForDuty(brake.duty());
+            status.excitation = brake.excitation();
+            m_can.setCyclic(dyno_can::encodeStatus(m_dynoCanBaseId, status), dyno_can::StatusPeriodMs);
+        }
+        else {
+            measure.torque_Nm = m_simulator->m_dyno.m_enabled
+                ? units::convert(m_simulator->getFilteredDynoTorque(), units::Nm)
+                : 0.0;
+            measure.speed_rpm = std::abs(m_iceEngine->getRpm());
+            measure.power_W = measure.torque_Nm * std::abs(m_iceEngine->getSpeed());
+        }
+        m_can.setCyclic(dyno_can::encodeMeasure(m_dynoCanBaseId, measure), dyno_can::MeasurePeriodMs);
+
+        dyno_can::EngineStatus engine;
+        engine.remote = m_canRemote;
+        engine.ignition = m_simulator->getEngine()->getIgnitionModule()->m_enabled;
+        engine.starter = m_simulator->m_starterMotor.m_enabled;
+        engine.timeout = m_canError;
+        engine.throttle = m_speedSetting;
+        m_can.setCyclic(
+            dyno_can::encodeEngineStatus(m_dynoCanBaseId, engine),
+            dyno_can::EngineStatusPeriodMs);
+        return;
+    }
 
     const bool dynoEnabled = m_simulator->m_dyno.m_enabled;
 
@@ -1293,11 +1378,16 @@ void EngineSimApplication::updateCanTransmit() {
 
     // The dyno is coupled to the crankshaft, so its speed is the engine speed.
     // Its torque is the braking torque it applies (only meaningful when enabled).
-    const float dynoSpeed_rpm = static_cast<float>(std::abs(m_iceEngine->getRpm()));
+    float dynoSpeed_rpm = static_cast<float>(std::abs(m_iceEngine->getRpm()));
     const float throttleSet_percent = static_cast<float>(m_speedSetting * 100.0);
     const double trueTorque_Nm = dynoEnabled
         ? units::convert(m_simulator->getFilteredDynoTorque(), units::Nm)
         : 0.0;
+
+    // Eddy current brake: its own measurements (load cell, speed sensor)
+    if (m_eddyDyno) {
+        dynoSpeed_rpm = static_cast<float>(m_simulator->m_brake.measuredSpeed_rpm());
+    }
 
     // Load cell: gaussian noise (present even with the dyno off, like a real
     // sensor) followed by a first-order low-pass filter
@@ -1312,6 +1402,7 @@ void EngineSimApplication::updateCanTransmit() {
         ? dt / (dt + m_canTorqueFilterTau)
         : 1.0;
     m_canMeasuredTorque_Nm += alpha * (rawTorque_Nm - m_canMeasuredTorque_Nm);
+    if (m_eddyDyno) m_canMeasuredTorque_Nm = m_simulator->m_brake.measuredTorque();
 
     m_can.setCyclic(avl_emcon::encodeBmeControl(control), avl_emcon::BmeControlPeriodMs);
     m_can.setCyclic(
@@ -1455,7 +1546,7 @@ void EngineSimApplication::processEngineInput() {
     }
 
     if (m_canRemote) {
-        m_targetSpeedSetting = clamp(m_hostDemand2.alphaDemand_percent / 100.0);
+        m_targetSpeedSetting = m_remoteThrottle;
     }
     else if (prevTargetThrottle != m_targetSpeedSetting) {
         m_infoCluster->setLogMessage("Speed control set to " + std::to_string(m_targetSpeedSetting));
@@ -1498,7 +1589,7 @@ void EngineSimApplication::processEngineInput() {
         m_infoCluster->setLogMessage(msg);
     }
 
-    if (m_canRemote) {
+    if (m_canRemote && m_canEmcon) {
         // Control_Mode_Command: 0 = hold Speed_Demand, 1 = brake with Torque_Demand
         const bool torqueMode = m_hostControl.controlMode == avl_emcon::ControlMode::Torque;
 
@@ -1561,7 +1652,7 @@ void EngineSimApplication::processEngineInput() {
 
     const bool prevStarterEnabled = m_simulator->m_starterMotor.m_enabled;
     if (m_canRemote) {
-        m_simulator->m_starterMotor.m_enabled = m_hostControl.starter;
+        m_simulator->m_starterMotor.m_enabled = m_remoteStarter;
     }
     else if (m_engine.IsKeyDown(ysKey::Code::S) || autostart) {
         m_simulator->m_starterMotor.m_enabled = true;
@@ -1581,7 +1672,7 @@ void EngineSimApplication::processEngineInput() {
     const bool prevIgnitionEnabled = ignitionModule->m_enabled;
     const bool ignitionKeyPressed = m_engine.ProcessKeyDown(ysKey::Code::A);
     if (m_canRemote) {
-        ignitionModule->m_enabled = m_hostControl.ignitionKey;
+        ignitionModule->m_enabled = m_remoteIgnition;
     }
     else if (ignitionKeyPressed) {
         ignitionModule->m_enabled = !ignitionModule->m_enabled;

@@ -35,7 +35,8 @@
 <pre><code>import "engines/&lt;nome&gt;/&lt;nome&gt;.mr"</code></pre></li>
     <li>O arquivo precisa de um <code>public node main</code> que chame <code>set_engine</code>,
         <code>set_vehicle</code> e <code>set_transmission</code> (veja o final do <code>cfr_f1.mr</code>).</li>
-    <li>Crie o dataset da ECU para o motor (veja <a href="../ECU/Aprendizado.html">Aprendizado de mapas</a>).</li>
+    <li>Defina os injetores do motor (<code>injector_flow</code> [cc/min] e <code>injector_dead_time</code> [ms] no nó
+        <code>engine</code>) e crie o dataset da ECU para o motor (veja <a href="../ECU/Arquivo_DCM.html">Arquivo DCM</a>).</li>
   </ol>
 
   <h2>Geometria</h2>

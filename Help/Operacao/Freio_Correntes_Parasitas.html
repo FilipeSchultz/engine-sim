@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Freio de correntes parasitas</title>
+  <link rel="stylesheet" href="../estilo.css">
+  <script src="../_sys/pagina.js"></script>
+</head>
+<body>
+<div class="conteudo">
+
+  <h1>Freio de correntes parasitas</h1>
+  <p class="subtitulo">Modelo do dinamômetro do banco de motores pequenos (Zöllner tipo 1) e do controlador da bobina por CAN</p>
+
+  <table class="ficha">
+    <tr><td>Ligar</td><td>Padrão (<code>ENGINE_SIM_DYNO_MODEL=ideal</code> volta ao dinamômetro ideal)</td></tr>
+    <tr><td>Código</td><td><code>include/eddy_current_brake.h</code>, <code>src/eddy_current_brake.cpp</code>,
+        <code>include/dyno_can.h</code></td></tr>
+    <tr><td>Protocolo CAN</td><td><code>Dyno_Eddy_Brake.dbc</code> (raiz do repositório)</td></tr>
+    <tr><td>Iniciar</td><td><code>tools\banco\iniciar_banco.bat</code> (simulador + ECU virtual, CAN no canal Kvaser 0)</td></tr>
+  </table>
+
+  <p>Substitui o dinamômetro ideal (que trava a rotação) por um freio como o do banco: ele <b>só absorve</b> torque,
+     não gira o motor, responde devagar ao PWM da bobina e mede como o banco mede. Com ele a rotação oscila dentro do
+     ciclo (a inércia do volante e do rotor é que segura) e ao longo de segundos (quem segura é o controlador).</p>
+
+  <div class="aviso">
+    <b>Atenção:</b> o freio não consegue girar o motor. Dê a partida com o motor de partida (<b>S</b> ou
+    <code>ENGINE_SIM_AUTOSTART</code>); <code>ENGINE_SIM_DYNO_HOLD</code> só vira o alvo de rotação do controlador interno.
+  </div>
+
+  <h2>Modelo</h2>
+  <pre>PWM ─► 1ª ordem 1,8 s (bobina e circuito magnético) ─► corrente (excitação)
+torque = mapa(excitação) × fator de rotação(rpm) × ENGINE_SIM_DYNO_BRAKE_GAIN + arrasto</pre>
+  <table>
+    <tr><th>Parte</th><th>De onde vem</th></tr>
+    <tr><td>Mapa PWM → torque</td><td>Varreduras de PWM do banco (0 a 4095) a 2500 e 3200 rpm, como medidas, interpoladas
+        para 3000 rpm; acima de 3750 extrapolado. Com PWM máximo: ~10 N·m a 1000 rpm, ~14 N·m a 2500 rpm, ~15 N·m a
+        3000 rpm</td></tr>
+    <tr><td>Fator de rotação</td><td>Curva <i>Md max</i> da folha de dados, digitalizada: zero parado, quase linear até 1000 rpm,
+        depois cresce devagar</td></tr>
+    <tr><td>Arrasto com a bobina desligada</td><td>0,21 N·m a 3000 rpm (varreduras, PWM 0), proporcional a √rpm</td></tr>
+    <tr><td>Dinâmica</td><td>Um atraso de 1,8 s na corrente da bobina, identificado no datalog <code>torque0-3</code> (degrau
+        de 0 para 3 N·m com o PID ligado: 63 % em ~2,6 s). O formato em S do torque vem do mapa (torque ~ corrente²).
+        A escala de PWM daquele log é incerta: confirmar com um degrau de PWM em malha aberta</td></tr>
+    <tr><td>Potência máxima</td><td>6 PS (4,4 kW), com água. Acima disso o simulador avisa e marca <code>Over_Power</code></td></tr>
+    <tr><td>Rotor</td><td>Inércia de 0,02 kg·m² (estimada) somada à do virabrequim; acoplamento rígido</td></tr>
+  </table>
+
+  <h3>Medições</h3>
+  <ul>
+    <li><b>Célula de carga</b> na carcaça: mede o torque eletromagnético (não o do eixo: a inércia do rotor fica no meio),
+        filtro de 0,05 s e ruído de 0,007 N·m.</li>
+    <li><b>Rotação</b>: sensor de 720 pulsos por volta, pulsos contados a cada 10 ms (resolução de 8,3 rpm).</li>
+  </ul>
+
+  <h2>De onde vem o comando</h2>
+  <ol>
+    <li><b><code>DYNO_Command</code> pelo CAN</b>, enquanto chegar (timeout de 0,5 s): o PID é da automação (LabVIEW).
+        Ele manda uma <b>carga de 0 a 100 %</b>, não o PWM: o simulador lineariza a curva do freio (mapa inverso) e
+        o torque fica proporcional à carga em qualquer rotação: torque = arrasto + carga × (máximo − arrasto).</li>
+    <li>Sem ele, o <b>controlador interno</b>, se o dinamômetro estiver ligado (<b>D</b>, ou <code>Dyno_On_Off</code> do
+        EMCON). Ele segue os mesmos comandos do dinamômetro ideal: rotação (hold, <b>H</b> + <b>G</b>, modo Speed do EMCON)
+        ou torque (modo Torque do EMCON).</li>
+    <li>Senão, bobina desligada (só o arrasto).</li>
+  </ol>
+  <table>
+    <tr><th>Controlador interno</th><th>Ganhos padrão</th><th>Variáveis</th></tr>
+    <tr><td>Torque</td><td>PI na corrente da bobina (set point e célula de carga pelo mapa inverso), P 4, Ti 1,8 s, com o set point em corrente como feedforward</td>
+        <td><code>ENGINE_SIM_DYNO_TORQUE_KP</code>, <code>_TI</code></td></tr>
+    <tr><td>Rotação</td><td>P 0,00015 /rpm, I 0,00005 /(rpm·s) (para um motor pequeno, inércia ~0,07 kg·m²)</td>
+        <td><code>ENGINE_SIM_DYNO_SPEED_KP</code>, <code>_KI</code></td></tr>
+  </table>
+  <div class="dica">
+    <b>Dica:</b> segurar rotação só com o freio é lento (o freio leva ~2,6 s para chegar a 63 %). No banco a rotação é
+    segurada pela borboleta e o freio fica em torque, como no datalog. Os ganhos de rotação dependem da inércia: no CFR
+    (~1,3 kg·m²) use cerca de 0,002 e 0,0007.
+  </div>
+
+  <h2>Protocolo CAN</h2>
+  <p>É o protocolo CAN padrão do simulador: o RCS (LabVIEW) comanda o freio e o motor só por ele; o AVL EMCON fica
+     desligado (<code>ENGINE_SIM_CAN_PROTOCOL=emcon</code> para voltar). Identificadores de 11 bits consecutivos a partir
+     de <code>ENGINE_SIM_DYNO_CAN_ID</code> (padrão 0x300; o DBC usa 0x300). Little-endian, inteiros escalados. Canal
+     Kvaser: <code>ENGINE_SIM_CAN_CHANNEL</code>. Mapa de sinais do RCS: <code>CanConfigRCS_Eddy.canconfig</code>.</p>
+
+  <h3>DYNO_Command — 0x300, automação → freio</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Conteúdo</th></tr>
+    <tr><td>0–1</td><td><code>Load_Demand</code></td><td>u16, 0,01 %: carga de 0 a 100 % do torque máximo do freio na
+        rotação atual (linear)</td></tr>
+    <tr><td>2, bit 0</td><td><code>Coil_Enable</code></td><td>1 = bobina ligada, 0 = desligada</td></tr>
+    <tr><td>3</td><td><code>Alive_Counter</code></td><td>u8, informativo</td></tr>
+  </table>
+
+  <h3>DYNO_Measure — 0x301, freio → automação, a cada 10 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Conteúdo</th></tr>
+    <tr><td>0–1</td><td><code>Torque</code></td><td>i16, 0,001 N·m, célula de carga</td></tr>
+    <tr><td>2–3</td><td><code>Speed</code></td><td>u16, 0,25 rpm</td></tr>
+    <tr><td>4–5</td><td><code>Power</code></td><td>u16, W</td></tr>
+    <tr><td>6</td><td><code>Alive_Counter</code></td><td>u8, +1 por transmissão</td></tr>
+    <tr><td>7</td><td>bits</td><td>0 <code>Ext_Demand_Active</code>, 1 <code>Command_Timeout</code>, 2 <code>Over_Power</code>,
+        3 <code>Internal_Control</code></td></tr>
+  </table>
+
+  <h3>DYNO_Status — 0x302, freio → automação, a cada 100 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Conteúdo</th></tr>
+    <tr><td>0–1</td><td><code>Load_Applied</code></td><td>u16, 0,01 %: carga aplicada (CAN ou controlador interno)</td></tr>
+    <tr><td>2–3</td><td><code>Duty</code></td><td>u16, 0,01 %: PWM da bobina que a linearização deu</td></tr>
+    <tr><td>4–5</td><td><code>Excitation</code></td><td>u16, 0,01 %: corrente da bobina / máxima, depois do atraso magnético</td></tr>
+  </table>
+  <h3>ENGINE_Command — 0x303, automação → motor, a cada 20 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Conteúdo</th></tr>
+    <tr><td>0, bit 0</td><td><code>Ignition</code></td><td>1 = ignição ligada</td></tr>
+    <tr><td>0, bit 1</td><td><code>Starter</code></td><td>1 = motor de partida</td></tr>
+    <tr><td>1–2</td><td><code>Throttle</code></td><td>u16, 0,01 %</td></tr>
+    <tr><td>3</td><td><code>Alive_Counter</code></td><td>u8, informativo</td></tr>
+  </table>
+  <p>Enquanto o <code>ENGINE_Command</code> chega, a automação está no controle (remoto) e o teclado fica bloqueado. Sem ele
+     por <code>ENGINE_SIM_CAN_TIMEOUT_MS</code> (500 ms), o simulador volta para manual: acelerador 0, partida e ignição
+     desligadas; a bobina do freio desliga pelo timeout do <code>DYNO_Command</code>.</p>
+
+  <h3>ENGINE_Status — 0x304, motor → automação, a cada 100 ms</h3>
+  <table>
+    <tr><th>Bytes</th><th>Sinal</th><th>Conteúdo</th></tr>
+    <tr><td>0, bits 0–3</td><td><code>Remote</code>, <code>Ignition_State</code>, <code>Starter_State</code>,
+        <code>Command_Timeout</code></td><td>Automação no controle, ignição, partida, comando parou</td></tr>
+    <tr><td>1–2</td><td><code>Throttle_Applied</code></td><td>u16, 0,01 %</td></tr>
+  </table>
+
+  <h2>Variáveis de ambiente</h2>
+  <table>
+    <tr><th>Variável</th><th>Padrão</th><th>Função</th></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_MODEL</code></td><td>(freio)</td><td><code>ideal</code> volta ao dinamômetro ideal (trava a rotação, CFR)</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_PROTOCOL</code></td><td>(banco)</td><td><code>emcon</code> volta ao AVL EMCON</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_TIMEOUT_MS</code></td><td>500</td><td>Tempo sem <code>ENGINE_Command</code> até voltar para manual</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_BRAKE_GAIN</code></td><td>1.0</td><td>Multiplica o torque de excitação (outra tensão na bobina, outro freio)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_ROTOR_INERTIA</code></td><td>0.02</td><td>Inércia do rotor [kg·m²]</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_CAN_ID</code></td><td>0x300</td><td>Identificador do <code>DYNO_Command</code> (os outros são +1 e +2)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_TORQUE_KP</code> / <code>_TI</code></td><td>4 / 1.8 s</td><td>Controlador interno de torque (PI em corrente da bobina)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_SPEED_KP</code> / <code>_KI</code></td><td>0.00015 / 0.00005</td><td>Controlador interno de rotação</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_LOG</code></td><td>—</td><td>Datalog CSV a 20 Hz (abaixo)</td></tr>
+  </table>
+
+  <h3>Datalog</h3>
+  <p><code>pwm_source</code> (0 bobina desligada, 1 controlador interno, 2 CAN), <code>torque_setpoint_Nm</code>,
+     <code>speed_setpoint_rpm</code>, <code>duty_percent</code>, <code>excitation_percent</code>, <code>brake_torque_Nm</code>
+     (verdadeiro), <code>load_cell_Nm</code>, <code>speed_measured_rpm</code>, <code>engine_rpm</code>, <code>power_W</code>,
+     <code>throttle_percent</code>.</p>
+
+  <h2>Testar sem o banco</h2>
+  <p>No Kvaser CanKing (ver <a href="../Comunicacao/CAN_CanKing.html">Teste com Kvaser CanKing</a>), envie o
+     <code>DYNO_Command</code> em 0x300 com, por exemplo, <code>88 13 01 00</code> (carga 50 %, bobina ligada) a cada
+     100 ms, e acompanhe o <code>DYNO_Measure</code>: o torque vai para a metade do máximo daquela rotação
+     (~7 N·m a 2500 rpm) em alguns segundos.</p>
+
+  <h2>PID no LabVIEW</h2>
+  <p>Com a carga linear, o PID de torque do RCS pode ser um PI simples: setpoint e medição em N·m, saída em % de carga
+     (0 a 100). Ponto de partida, testado no modelo: <b>Kc = 10 %/N·m, Ti = 1,8 s</b> (0,030 min no PID.vi da NI),
+     Td = 0, faixa de saída 0 a 100. Resposta: 63 % em ~1,9 s, sobressinal até ~10 % em degraus pequenos. Kc = 20 deixa
+     degraus pequenos mais rápidos (63 % em 1,3 s) com ~15 % de sobressinal. Degraus grandes ficam limitados pela carga
+     de 100 %.</p>
+  <div class="aviso">
+    <b>No banco real</b> a linearização precisa existir em algum lugar (firmware do ESP32 ou LabVIEW): a curva está em
+    <code>tools\dyno\brake_map.csv</code> (torque de excitação a 3000 rpm × duty). A carga é a fração do último valor
+    da tabela; o duty sai interpolando a tabela ao contrário.
+  </div>
+
+  <div class="pendente">Refinar com o banco: degraus de PWM em malha aberta (sem PID) em 2 ou 3 rotações, com a tensão da
+    bobina medida, para fixar o mapa e separar a dinâmica do freio da do filtro da medição. Inércia do rotor e do volante do
+    motor. Código do ESP32: leitura de rotação e filtro da célula de carga.</div>
+
+</div>
+<div class="rodape">Volvo Group &middot; PEL CUR &middot; Operação &middot; Revisão 0.1</div>
+</body>
+</html>

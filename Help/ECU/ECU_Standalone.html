@@ -31,12 +31,13 @@
   <ol>
     <li>Abra a ECU com a calibração do motor:
 <pre><code>cd build\ecu\Release
-ecu-standalone.exe --cal ..\..\..\assets\calibration\calibration.dcm --xcp</code></pre></li>
-    <li>Abra o simulador com o link ligado:
-<pre><code>set ENGINE_SIM_ECU_LINK=1
-cd build
+ecu-standalone.exe --cal ..\..\..\assets\calibration\calibration.dcm</code></pre>
+        O servidor XCP para o VISION abre junto (<code>0.0.0.0:5555</code>).</li>
+    <li>Abra o simulador:
+<pre><code>cd build
 Release\engine-sim-app.exe</code></pre>
-        ou, no script do motor, <code>set_ecu_settings(link: true)</code>.</li>
+        Ele procura a ECU em <code>127.0.0.1:5600</code>; para mudar, use <code>set_ecu_settings(link_address: ...,
+        link_port: ...)</code> no script ou <code>ENGINE_SIM_ECU_LINK_ADDRESS</code>.</li>
     <li>No painel de informações do simulador aparece <code>ECU link: ecu-standalone connected</code>; na janela da ECU,
         <b>Engine link</b> fica verde: <i>Communicating with the engine</i>.</li>
   </ol>
@@ -52,7 +53,7 @@ Release\engine-sim-app.exe</code></pre>
     <tr><td>Estado (canto superior)</td><td>RUNNING</td><td>STOPPED (cinza), FAILED (vermelho, veja as mensagens)</td></tr>
     <tr><td>Engine link</td><td>Comunicando com o motor (amostras/s)</td>
         <td>Laranja: esperando o controlador de I/O · Vermelho: sem dados há X s · Azul: estímulo, sem motor</td></tr>
-    <tr><td>XCP</td><td>Ferramenta conectada</td><td>Laranja: esperando ferramenta · Cinza: desligado (<code>--xcp</code>)</td></tr>
+    <tr><td>XCP</td><td>Ferramenta conectada</td><td>Laranja: esperando ferramenta · Cinza: desligado (<code>--no-xcp</code>)</td></tr>
     <tr><td>Calibration</td><td>Arquivo carregado (recarrega ao salvar)</td>
         <td>Vermelho: arquivo rejeitado, valores anteriores mantidos · Azul: calibração com a ferramenta XCP</td></tr>
     <tr><td>Datalog</td><td>Gravando a 20 Hz</td><td>Cinza: desligado (<code>--log</code>)</td></tr>
@@ -62,8 +63,11 @@ Release\engine-sim-app.exe</code></pre>
   <h2>Opções da ECU</h2>
   <table>
     <tr><th>Opção</th><th>Função</th></tr>
-    <tr><td><code>--cal &lt;arquivo.dcm&gt;</code></td><td>Calibração (padrão <code>calibration.dcm</code> na pasta atual; criado com os valores padrão se não existir)</td></tr>
-    <tr><td><code>--xcp [endereço[:porta]]</code></td><td>Servidor XCP para o VISION (padrão <code>0.0.0.0:5555</code>). O A2L é gravado na pasta de onde a ECU foi aberta</td></tr>
+    <tr><td><code>--cal &lt;arquivo.dcm&gt;</code></td><td>Calibração. Sem a opção, a ECU usa a do repositório, <code>assets\calibration\calibration.dcm</code> (procurada a partir da
+        pasta do executável), então o duplo clique já abre a calibração do laboratório. Um arquivo que não existe é criado com os
+        valores padrão: funções desligadas, ponto 10° e injeção 1 ms em todo o mapa</td></tr>
+    <tr><td><code>--xcp [endereço[:porta]]</code></td><td>Endereço do servidor XCP para o VISION, sempre ligado (padrão <code>0.0.0.0:5555</code>). O A2L é gravado na pasta de onde a ECU foi aberta</td></tr>
+    <tr><td><code>--no-xcp</code></td><td>ECU sem servidor XCP</td></tr>
     <tr><td><code>--log &lt;arquivo.csv&gt;</code></td><td>Datalog de todas as medições da ECU, 20 Hz</td></tr>
     <tr><td><code>--udp &lt;endereço[:porta]&gt;</code></td><td>Onde a ECU escuta o controlador de I/O (padrão <code>127.0.0.1:5600</code>; <code>0.0.0.0</code> aceita outros PCs)</td></tr>
     <tr><td><code>--stimulus [k=v,...]</code></td><td>Sem motor: entradas fixas digitadas na janela (rpm, map, iat, clt, tps, lambda, battery), para mexer na calibração na bancada</td></tr>
@@ -74,7 +78,7 @@ Release\engine-sim-app.exe</code></pre>
   <table>
     <tr><th><code>link_sync</code></th><th>Comportamento</th><th>Quando usar</th></tr>
     <tr><td><code>lockstep</code> (padrão)</td>
-        <td>A cada amostra o simulador espera o comando da ECU (até 50 ms). Resultado igual ao da ECU dentro do simulador</td>
+        <td>A cada amostra o simulador espera o comando da ECU (até 50 ms). Resultado determinístico, que não depende do PC</td>
         <td>Calibração, comparação de resultados</td></tr>
     <tr><td><code>free</code></td>
         <td>O simulador nunca espera e aplica o último comando recebido: latência e perdas como numa bancada real</td>
@@ -87,9 +91,9 @@ Release\engine-sim-app.exe</code></pre>
      <code>ECU link: no command for 0.1 s, ECU outputs cut</code>. Quando a ECU volta a responder, ela reassume sozinha.</p>
 
   <div class="aviso">
-    <b>Atenção:</b> com o link ligado, a ECU dentro do simulador não roda: calibração, XCP e datalog da ECU são os do
-    <code>ecu-standalone</code>. O <code>ENGINE_SIM_ECU_LOG</code> do simulador passa a gravar o lado do controlador de I/O
-    (estado do link, o que foi enviado e aplicado, λ real do cilindro, torque).
+    <b>Atenção:</b> a ECU só existe no <code>ecu-standalone</code>: calibração, XCP e datalog da ECU são dele. Sem ele aberto,
+    o motor roda na mistura e no avanço do script. O <code>ENGINE_SIM_ECU_LOG</code> do simulador grava o lado do controlador
+    de I/O (estado do link, o que foi enviado e aplicado, λ real do cilindro, torque).
   </div>
 
   <h2>Injetores</h2>

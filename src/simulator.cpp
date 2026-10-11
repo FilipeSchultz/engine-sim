@@ -104,6 +104,11 @@ bool Simulator::simulateStep() {
     }
 
     const double timestep = getTimestep();
+    if (m_dyno.m_eddyCurrent && m_engine != nullptr) {
+        m_dyno.m_brakeTorque =
+            m_brake.step(timestep, m_engine->getOutputCrankshaft()->m_body.v_theta, m_dyno);
+    }
+
     m_system->process(timestep, 1);
 
     m_engine->update(timestep);

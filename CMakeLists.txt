@@ -31,7 +31,8 @@ project(engine-sim)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# Virtual ECU (separate library, see ecu/README.md)
+# Virtual ECU (separate library and program, see ecu/README.md). The simulator
+# only uses its link to play the I/O controller
 add_subdirectory(ecu)
 
 # ========================================================
@@ -68,6 +69,7 @@ add_library(engine-sim STATIC
     src/derivative_filter.cpp
     src/direct_throttle_linkage.cpp
     src/dynamometer.cpp
+    src/eddy_current_brake.cpp
     src/engine.cpp
     src/exhaust_system.cpp
     src/feedback_comb_filter.cpp
@@ -99,7 +101,6 @@ add_library(engine-sim STATIC
     src/vehicle_drag_constraint.cpp
     src/vtec_valvetrain.cpp
     src/ecu_hardware.cpp
-    src/ecu_learner.cpp
     src/indicating_system.cpp
 
     # Include files
@@ -116,6 +117,7 @@ add_library(engine-sim STATIC
     include/derivative_filter.h
     include/direct_throttle_linkage.h
     include/dynamometer.h
+    include/eddy_current_brake.h
     include/engine.h
     include/exhaust_system.h
     include/feedback_comb_filter.h
@@ -148,12 +150,11 @@ add_library(engine-sim STATIC
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
     include/ecu_hardware.h
-    include/ecu_learner.h
     include/indicating_system.h
 )
 
 target_link_libraries(engine-sim
-    engine-sim-ecu
+    engine-sim-ecu-link
     simple-2d-constraint-solver
     csv-io
     delta-basic)
@@ -258,6 +259,7 @@ add_executable(engine-sim-app WIN32
     src/info_cluster.cpp
     src/can_interface.cpp
     src/avl_emcon.cpp
+    src/dyno_can.cpp
     src/udp_sender.cpp
 
     # Include files
@@ -296,6 +298,7 @@ add_executable(engine-sim-app WIN32
     include/info_cluster.h
     include/can_interface.h
     include/avl_emcon.h
+    include/dyno_can.h
     include/udp_sender.h
 )
 
@@ -353,14 +356,6 @@ endif (CAN_ENABLED)
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
-if (ECU_XCP_ENABLED)
-    # XCP_104.aml next to the executable and in the build directory (the
-    # A2L is written to the working directory)
-    add_custom_command(TARGET engine-sim-app POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ECU_XCP_AML}" "$<TARGET_FILE_DIR:engine-sim-app>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ECU_XCP_AML}" "${CMAKE_BINARY_DIR}")
-endif ()
-
 add_subdirectory(dependencies)
 
 # GTEST
@@ -373,11 +368,13 @@ add_executable(engine-sim-test
     test/function_test.cpp
     test/synthesizer_tests.cpp
     test/ecu_tests.cpp
+    test/eddy_current_brake_tests.cpp
 )
 
 target_link_libraries(engine-sim-test
     gtest_main
     engine-sim
+    engine-sim-ecu
 )
 
 include(GoogleTest)

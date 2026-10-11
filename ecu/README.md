@@ -1,22 +1,22 @@
 # Virtual ECU
 
-Engine control unit for engine-sim, built as a separate library
-(`engine-sim-ecu`) with no dependency on the simulation. It only knows its
-sensors, its actuators and its calibration, like a real ECU on a HIL bench.
+Engine control unit for engine-sim: a library (`engine-sim-ecu`) with no
+dependency on the simulation, run by its own program, `ecu-standalone`. It
+only knows its sensors, its actuators and its calibration, like a real ECU on
+a HIL bench. The simulator plays its I/O controller (the microcontroller of a
+real bench) and talks to it over UDP; later a microcontroller will, over CAN.
 
 ```
- engine-sim (plant)                       ecu/ (this library)
-┌──────────────────────┐   EcuInputs    ┌──────────────────────────────────────────┐
-│ EcuHardware          │ ─────────────► │ Ecu::step()                              │
-│  sensor models:      │                │  1. inputs → EcuSignals                  │
-│  crank/cam, MAP,     │                │  2. scheduler: Step / 10 ms / 100 ms     │
-│  IAT, CLT, TPS, λ    │                │     InputProcessing → EngineState →      │
-│                      │                │     RevLimiter → LambdaControl →         │
-│  actuator models:    │   EcuOutputs   │     FuelControl → IgnitionControl        │
-│  port injectors,     │ ◄───────────── │  3. output stage: injector pulses at     │
-│  spark advance       │                │     their crank angle, spark advance     │
-└──────────────────────┘                └──────────────────────────────────────────┘
-                                          calibration (DCM)   measurements (log)
+ engine-sim (plant + I/O controller)            ecu-standalone (this folder)
+┌──────────────────────────────┐   samples   ┌──────────────────────────────────┐
+│ EcuHardware                  │  every 10ms │ Ecu::step()                      │
+│  sensors: crank/cam, MAP,    │ ──────────► │  inputs → EcuSignals             │
+│  IAT, CLT, TPS, lambda       │   UDP 5600  │  tasks: InputProcessing →        │
+│  rpm and MAP averaged per    │             │  EngineState → RevLimiter →      │
+│  firing interval             │   command   │  LambdaControl → FuelControl →   │
+│  injectors fired at the      │ ◄────────── │  IgnitionControl                 │
+│  commanded angle, advance    │             │ calibration (DCM), XCP, datalog  │
+└──────────────────────────────┘             └──────────────────────────────────┘
 ```
 
 | Where | What |
@@ -28,13 +28,12 @@ sensors, its actuators and its calibration, like a real ECU on a HIL bench.
 | [include/ecu/calibration.h](include/ecu/calibration.h) | Calibration memory, `Value` / `Curve` / `Map`, interpolation |
 | [include/ecu/dcm_file.h](include/ecu/dcm_file.h) | ASAM DCM 2.0 reader / writer (FESTWERT, KENNLINIE, KENNFELD) |
 | [src/ecu.cpp](src/ecu.cpp) | Function list (execution order), scheduler, injection output stage |
-| [include/ecu/host.h](include/ecu/host.h) | `EcuHost`: the ECU's environment on a PC (calibration file, XCP server, datalog), shared by the simulator and the standalone ECU |
-| [standalone/](standalone/) | `ecu-standalone`: the ECU as a program of its own, for a real engine through an I/O controller |
+| [include/ecu/host.h](include/ecu/host.h) | `EcuHost`: the ECU's environment on a PC (calibration file, XCP server, datalog) |
+| [include/ecu/link.h](include/ecu/link.h) | Link protocol between the ECU and its I/O controller; with `io.h` it is library `engine-sim-ecu-link`, all the simulator uses |
+| [standalone/](standalone/) | `ecu-standalone`: the program (I/O link, status window) |
 
 On the simulation side, [EcuHardware](../include/ecu_hardware.h) is the only
-code that touches both the engine and the ECU, and
-[EcuLearner](../include/ecu_learner.h) is a bench tool that records the engine
-script's mixture and timing into ECU maps (`ENGINE_SIM_ECU_LEARN`).
+code that touches both the engine and the link.
 
 ## Functions
 
@@ -80,9 +79,9 @@ Example: a fuel factor against throttle position.
 3. `signals.h`: add `double fuelCorrTps = 1;` under FuelControl.
 4. `fuel_control.cpp`, `run()`: compute `s.fuelCorrTps = m_tpsCorrection.lookup(cal, s.tps_percent);`
    and multiply it into the open time.
-5. Rebuild. The new `KENNLINIE FuelTpsCorr` appears in learned / default DCM
+5. Rebuild. The new `KENNLINIE FuelTpsCorr` appears in default and saved DCM
    files, can be added to `calibration.dcm` by hand and reloads live; the new
-   measurement appears in the `ENGINE_SIM_ECU_LOG` datalog.
+   measurement appears in the datalog (`--log`) and in the A2L.
 
 ## Adding a function
 
@@ -112,8 +111,8 @@ sensor model there.
 - `Ecu::epk()` identifies the software: `ESIM_ECU_` plus a fingerprint of the
   parameter and measurement layout (names, sizes, offsets). It changes
   whenever a parameter or measurement is added, removed or resized, i.e.
-  whenever a calibration tool needs a new A2L; datasets written by the
-  simulator record it in their header.
+  whenever a calibration tool needs a new A2L; datasets written by the ECU
+  record it in their header.
 - A declaration error (duplicate name, axis input that is not a measurement,
   calibration larger than `CalibrationCapacity`) stops the ECU at start-up.
 - DCM files are written to a temporary file and renamed, so an interrupted
@@ -122,25 +121,30 @@ sensor model there.
   validation (out of limits, axis not increasing, wrong size) is rejected and
   the ECU keeps running on the previous calibration.
 - Every registered measurement is written to the datalog
-  (`ENGINE_SIM_ECU_LOG=<file.csv>`, 20 Hz), followed by plant values the ECU
-  can't see (true cylinder λ, AFR, pedal, dyno torque).
+  (`ecu-standalone --log <file.csv>`, 20 Hz). Plant values the ECU can't see
+  (true cylinder λ, AFR, pedal, dyno torque) are in the simulator's
+  `ENGINE_SIM_ECU_LOG`, with the link's state and the applied command.
 
 ## Sensors (EcuHardware)
 
 | Sensor | Model |
 |---|---|
 | Crank / cam | cycle angle 0–720°, instantaneous speed |
-| MAP | plenum pressure, instantaneous (the ECU averages it per firing interval) |
+| MAP | plenum pressure, averaged over the last firing interval by the I/O controller |
 | IAT | plenum gas temperature, first order 2 s |
-| CLT | constant 90 °C (no thermal model yet) |
+| CLT | `coolant_temperature` of the engine script, constant (no thermal model yet) |
 | TPS | throttle plate opening |
-| λ (wideband) | λ of the last combustion, first order 0.1 s; 0 until the first combustion |
+| λ (wideband) | exhaust gas at the sensor: λ of each cylinder's charge, carried by plug flow through `lambda_sensor_volume` (transport delay ∝ 1 / exhaust flow), then first order `lambda_sensor_time_constant`; range 0.65–6.5 (air); 0 until exhaust gas reaches it |
 
 The injectors are the engine's (`injector_flow` [cc/min] and
 `injector_dead_time` [ms] on the engine node of the script): a pulse delivers
 `flow × (pulse − dead time)` of fuel to the port, where it waits for the
-intake valve to open. `InjectorFlow` and `InjectorDeadTime` in the
-calibration describe the same injectors, as in a real ECU.
+intake valve to open. With `wall_film_fraction` > 0 part of each pulse
+wets the port walls and reaches the cylinder as the film evaporates (x-τ
+model, see [engine_modeling.md](../docs/engine_modeling.md#port-wall-film-wall_film_fraction--0)):
+transient fuel compensation has something to compensate. `InjectorFlow` and
+`InjectorDeadTime` in the calibration describe the same injectors, as in a
+real ECU.
 
 ## Standalone ECU
 
@@ -166,19 +170,20 @@ I/O controller carries out. The samples pace the ECU: `Ecu::step()` runs once
 per sample with the I/O controller's time step, and the XCP clock follows it
 (`--xcp-clock ecu`).
 
-`EcuHost` gives the program what the simulator has: `calibration.dcm`
-reloaded when saved, saved on `CalSaveRequest`, XCP server with the A2L, the
-datalog. The DCM files are interchangeable with the simulator's (parameters go
-by name); the A2L is not (each executable has its own addresses and EPK).
+`EcuHost` gives the program its environment: `calibration.dcm` reloaded when
+saved, saved on `CalSaveRequest`, XCP server with the A2L, the datalog. DCM
+files go by parameter name, so datasets carry over between ECU builds; the A2L
+does not (addresses and EPK change with the build).
 
 ```
-build/ecu/Release/ecu-standalone.exe --cal calibration.dcm --xcp --log ecu.csv
+build/ecu/Release/ecu-standalone.exe --cal calibration.dcm --log ecu.csv
 ```
 
 | Option | Meaning |
 |---|---|
-| `--cal <file.dcm>` | calibration file (default `calibration.dcm`, written with the defaults if missing) |
-| `--xcp [address[:port]]` | XCP on Ethernet server (default `0.0.0.0:5555`) |
+| `--cal <file.dcm>` | calibration file (default: the repository's `assets/calibration/calibration.dcm`, looked for from the executable's folder up, else `calibration.dcm` in the working directory; written with the defaults if missing) |
+| `--xcp [address[:port]]` | XCP on Ethernet server address (default `0.0.0.0:5555`); the server is always on |
+| `--no-xcp` | no XCP server |
 | `--xcp-clock ecu\|pc` | DAQ timestamps in I/O controller time (default) or PC time |
 | `--log <file.csv>` | datalog of every measurement, 20 Hz |
 | `--cylinders <n>`, `--firing-tdc <a,b,...>` | engine coding (default 1 cylinder; TDCs evenly spaced from 0) |
@@ -218,26 +223,27 @@ in the header; values out of range saturate.
 
 ### The simulator as I/O controller
 
-With `set_ecu_settings(link: true)` (or `ENGINE_SIM_ECU_LINK=1`)
-[EcuHardware](../include/ecu_hardware.h) stops stepping the ECU in the process
-and plays the microcontroller: it averages rpm and MAP over each firing
-interval, sends a sample every 10 ms of simulated time, fires the injectors at
-the commanded angle with the engine's own injectors (`injector_flow`,
-`injector_dead_time` on the engine node) and applies the advance.
+[EcuHardware](../include/ecu_hardware.h) plays the microcontroller: it
+averages rpm and MAP over each firing interval, sends a sample every 10 ms of
+simulated time, fires the injectors at the commanded angle with the engine's
+own injectors (`injector_flow`, `injector_dead_time` on the engine node) and
+applies the advance. `set_ecu_settings(link_address, link_port, link_sync)` in
+the script, or `ENGINE_SIM_ECU_LINK_ADDRESS` / `ENGINE_SIM_ECU_LINK_SYNC`,
+change where and how.
 
 - `link_sync: "lockstep"` (default): after each sample the simulation waits up
-  to 50 ms for its command, so the results are those of the ECU in the process
-  (checked on the CFR at 600 rpm, WOT: same MAP, lambda and torque; injection
-  within the protocol's 1 us). After 3 unanswered samples it stops waiting.
+  to 50 ms for its command, so the results don't depend on timing (checked on
+  the CFR at 600 rpm, WOT, against the ECU when it still ran in the
+  simulator: same MAP, lambda and torque; injection within the protocol's
+  1 us). After 3 unanswered samples it stops waiting.
 - `link_sync: "free"`: the simulation never waits and applies the last command
   received, as a real bench would.
 - Fail-safe: without a command for 0.1 s of simulated time the ECU outputs are
   cut (engine script mixture and timing take over); the next command restores
-  them.
+  them. Without ecu-standalone running the engine runs on the script.
 
-The simulator's calibration file, XCP and ECU datalog are then not used;
-`ENGINE_SIM_ECU_LOG` logs the I/O controller side instead (link state, the
-sample's rpm and MAP, the applied command, plant values).
+`ENGINE_SIM_ECU_LOG` logs the I/O controller side (link state, the sample's
+rpm and MAP, the applied command, plant values).
 
 ## XCP (build)
 
@@ -254,32 +260,25 @@ With `ECU_XCP_ENABLED` the ECU library links XCPlite (and `winmm`) and gets
 the `ECU_XCP_ENABLED` define; [config/xcplib_app_cfg.h](config/xcplib_app_cfg.h)
 sets XCPlite up for ATI VISION (absolute addressing on address extension 0, no
 XCPlite persistence). `XCP_104.aml`, which the generated A2L includes, is
-copied next to the executable and to the build directory. XCPlite needs MSVC
+copied next to `ecu-standalone.exe`. XCPlite needs MSVC
 on Windows (the Visual Studio generator already uses it).
 
 ## XCP (use)
 
-Turn it on in the engine script (build with `ECU_XCP_ENABLED`), in its
-`main` node or in `main.mr`:
+The XCP server starts with the ECU (`--no-xcp` turns it off). In a build
+without `ECU_XCP_ENABLED` the ECU runs without it and says so, unless `--xcp`
+was given explicitly (then it fails).
 
 ```
-public node main {
-    set_engine(...)
-    ...
-    set_ecu_settings(xcp: true)     // xcp_address, xcp_port, xcp_clock optional
-}
+ecu-standalone.exe --cal calibration.dcm                    # XCP on 0.0.0.0:5555
+ecu-standalone.exe --cal calibration.dcm --xcp 127.0.0.1:5556 --xcp-log 4
 ```
 
-It is read when the simulator starts (a change on script reload needs a
-restart). The environment variables override the script:
-
-| Variable | Default | Meaning |
+| Option | Default | Meaning |
 |---|---|---|
-| `ENGINE_SIM_XCP` | script | `1` / `0` turn the XCP server on / off |
-| `ENGINE_SIM_XCP_ADDRESS` | `0.0.0.0` | interface to listen on: every interface (tool on this or another PC); `127.0.0.1` = this PC only |
-| `ENGINE_SIM_XCP_PORT` | `5555` | UDP port |
-| `ENGINE_SIM_XCP_CLOCK` | `sim` | DAQ timestamps in simulated time (`sim`) or PC time (`real`) |
-| `ENGINE_SIM_XCP_LOG` | `2` | XCPlite debug level (4 = every command) |
+| `--xcp [address[:port]]` | `0.0.0.0:5555` | interface to listen on: every interface (tool on this or another PC); `127.0.0.1` = this PC only |
+| `--xcp-clock ecu\|pc` | `ecu` | DAQ timestamps in I/O controller time (the simulated time when the simulator is the I/O controller) or PC time |
+| `--xcp-log <0..4>` | `2` | XCPlite debug level (4 = every command) |
 
 At start-up the ECU:
 
@@ -293,12 +292,12 @@ At start-up the ECU:
    axis input measurement), every measurement (FLOAT64), groups
    `Cal_<function>` / `Meas_<function>`, EPK = `Ecu::epk()`;
 4. creates the cyclic DAQ events `Ecu_10ms` and `Ecu_100ms`, triggered after
-   the ECU tasks of that rate. With `ENGINE_SIM_XCP_CLOCK=sim` the XCP clock
-   (timestamps, GET_DAQ_CLOCK) is the simulated time, so samples are exactly
-   10 ms apart even though the simulation runs in bursts per frame.
+   the ECU tasks of that rate. With `--xcp-clock ecu` the XCP clock
+   (timestamps, GET_DAQ_CLOCK) is the I/O controller's, so samples are
+   exactly 10 ms apart even though the simulation runs in bursts per frame.
 
-The screen shows "XCP: waiting on <address>:<port>, A2L <path>", then
-"tool connected" / "disconnected".
+The messages show "XCP: waiting on <address>:<port>, A2L <path>", then
+"tool connected" / "disconnected"; the window's XCP line follows.
 
 Calibration with a tool connected:
 

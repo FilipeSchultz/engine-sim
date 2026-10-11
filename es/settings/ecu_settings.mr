@@ -1,29 +1,17 @@
 private import "engine_sim.mr"
 
-// Virtual ECU settings. Call it from the engine script's main node (or from
-// main.mr), e.g. set_ecu_settings(xcp: true). Applied when the simulator
-// starts; the environment variables ENGINE_SIM_XCP* override it.
+// Link to the ECU. The ECU is ecu-standalone (calibration, XCP, datalog); the
+// simulator plays its I/O controller over UDP. Call it from the engine
+// script's main node (or from main.mr) to change the defaults, e.g.
+// set_ecu_settings(link_sync: "free"). Read when the simulator starts; the
+// environment variables ENGINE_SIM_ECU_LINK_* override it.
 public node set_ecu_settings => __engine_sim__set_ecu_settings {
-    // XCP on Ethernet (UDP) server for calibration tools (ATI VISION, CANape)
-    input xcp [bool]: false;
-
-    // "0.0.0.0" = every interface (tool on this or another PC),
-    // "127.0.0.1" = this PC only
-    input xcp_address [string]: "0.0.0.0";
-    input xcp_port [int]: 5555;
-
-    // DAQ timestamps in simulated time ("sim") or PC time ("real")
-    input xcp_clock [string]: "sim";
-
-    // External ECU: the ECU runs in ecu-standalone and the simulator plays
-    // its I/O controller over UDP (the ECU in the simulator is not used; its
-    // calibration file, XCP and datalog are ecu-standalone's)
-    input link [bool]: false;
+    // Where ecu-standalone listens
     input link_address [string]: "127.0.0.1";
     input link_port [int]: 5600;
 
     // "lockstep": the simulation waits for the ECU's answer to each 10 ms
-    // sample (same results as the ECU in the simulator); "free": it never
-    // waits (latency and losses as on a real bench)
+    // sample (deterministic results); "free": it never waits (latency and
+    // losses as on a real bench)
     input link_sync [string]: "lockstep";
 }

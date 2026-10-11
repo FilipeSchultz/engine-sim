@@ -37,8 +37,9 @@ meas.add("fuel_corr_tps", "-", "Throttle position factor", &amp;s.fuelCorrTps);<
     <li><code>signals.h</code>: adicione <code>double fuelCorrTps = 1;</code> na parte de FuelControl.</li>
     <li><code>fuel_control.cpp</code>, <code>run()</code>: calcule
         <code>s.fuelCorrTps = m_tpsCorrection.lookup(cal, s.tps_percent);</code> e multiplique no tempo aberto.</li>
-    <li>Recompile. A nova <code>KENNLINIE FuelTpsCorr</code> aparece nos DCM aprendidos / padrão, pode ser adicionada ao
-        <code>calibration.dcm</code> à mão e recarrega ao vivo; a nova medição aparece no datalog <code>ENGINE_SIM_ECU_LOG</code>.</li>
+    <li>Recompile o <code>ecu-standalone</code>. A nova <code>KENNLINIE FuelTpsCorr</code> aparece nos DCM padrão e salvos,
+        pode ser adicionada ao <code>calibration.dcm</code> à mão e recarrega ao vivo; a nova medição aparece no datalog
+        (<code>--log</code>) e no A2L.</li>
   </ol>
 
   <h2>Adicionar uma função</h2>
@@ -55,8 +56,10 @@ meas.add("fuel_corr_tps", "-", "Throttle position factor", &amp;s.fuelCorrTps);<
 
   <h2>Sensor ou atuador novo</h2>
   <ul>
-    <li>Atuador: um campo em <code>EcuOutputs</code> e o modelo do atuador em <code>EcuHardware</code>.</li>
-    <li>Sensor: um campo em <code>EcuInputs</code> e o modelo do sensor em <code>EcuHardware</code>.</li>
+    <li>Atuador: um campo em <code>EcuOutputs</code>, no quadro de comando do protocolo (<code>ecu/include/ecu/link.h</code>)
+        e o modelo do atuador em <code>EcuHardware</code>.</li>
+    <li>Sensor: um campo em <code>EcuInputs</code>, num quadro de amostra do protocolo e o modelo do sensor em
+        <code>EcuHardware</code>.</li>
   </ul>
 
   <h2>Regras da calibração</h2>

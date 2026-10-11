@@ -10,70 +10,82 @@
 <div class="conteudo">
 
   <h1>XCP com ATI VISION</h1>
-  <p class="subtitulo">Medição e calibração da ECU virtual pelo VISION via XCP on Ethernet (em desenvolvimento)</p>
+  <p class="subtitulo">Medição e calibração da ECU virtual pelo VISION via XCP on Ethernet</p>
 
   <table class="ficha">
-    <tr><td>Biblioteca</td><td>XCPlite (<code>C:\Github\XCPlite</code>, MSVC)</td></tr>
-    <tr><td>Documento técnico</td><td><code>XCP_Module/XCPLITE_ENGINE_SIM.md</code></td></tr>
-    <tr><td>Transporte</td><td>XCP on Ethernet, UDP, <code>127.0.0.1:5555</code></td></tr>
+    <tr><td>Programa</td><td><code>ecu-standalone.exe</code>, XCP sempre ligado (veja <a href="../ECU/ECU_Standalone.html">ECU standalone</a>)</td></tr>
+    <tr><td>Biblioteca</td><td>XCPlite, submódulo <code>dependencies/submodules/XCPlite</code> (compilar com <code>ECU_XCP_ENABLED=ON</code>)</td></tr>
+    <tr><td>Transporte</td><td>XCP on Ethernet, UDP, padrão <code>0.0.0.0:5555</code></td></tr>
+    <tr><td>Documento técnico</td><td><code>XCP_Module/XCPLITE_ENGINE_SIM.md</code>, <code>ecu/README.md</code></td></tr>
   </table>
 
-  <div class="aviso">
-    <b>Atenção:</b> a integração do XCPlite no simulador <b>ainda não começou</b>. O protocolo foi validado com o VISION
-    num projeto de teste separado (<code>xcplite_ecu</code>). Hoje a calibração da ECU virtual é feita pelo
-    <a href="../ECU/Arquivo_DCM.html">arquivo DCM</a>.
-  </div>
+  <p>O VISION mede as variáveis da ECU por DAQ e calibra os parâmetros (escalares, curvas e mapas com eixos editáveis) com o
+     motor funcionando, como numa ECU real na bancada. O servidor XCP é o da ECU standalone; o simulador não tem XCP.</p>
 
-  <h2>Objetivo</h2>
-  <p>A ECU virtual deve falar XCP com o ATI VISION: o VISION mede variáveis por DAQ e calibra parâmetros (escalares, curvas e
-     mapas com eixos editáveis) com o simulador rodando, como numa ECU real na bancada.</p>
-
-  <h2>Situação</h2>
+  <h2>Ligar</h2>
+<pre><code>cd build\ecu\Release
+ecu-standalone.exe --cal ..\..\..\assets\calibration\calibration.dcm</code></pre>
+  <p>O servidor XCP abre junto com a ECU; <code>--no-xcp</code> desliga.</p>
   <table>
-    <tr><th>Item</th><th>Situação</th></tr>
-    <tr><td>XCPlite compilado no Windows (MSVC)</td><td><span class="tag tag-op">OK</span></td></tr>
-    <tr><td>VISION conecta, mede por DAQ (10 ms e 100 ms) e lê calibração</td><td><span class="tag tag-op">OK</span> com a <code>xcplite_ecu</code></td></tr>
-    <tr><td>Escrita de parâmetro escalar pelo VISION</td><td><span class="tag tag-op">OK</span></td></tr>
-    <tr><td>Valor escrito aparecendo na Data List do VISION</td><td><span class="tag tag-tr">A confirmar</span> (correção do "espelho" compilada)</td></tr>
-    <tr><td>Curva e mapa com eixos COM_AXIS e ponto de operação</td><td><span class="tag tag-tr">A confirmar</span> (inclusive mapa transposto)</td></tr>
-    <tr><td>"Act Rate" no VISION mostra 8,9 ms em todos os itens</td><td><span class="tag tag-tr">Em aberto</span></td></tr>
-    <tr><td>Persistência da calibração (DCM)</td><td><span class="tag tag-tr">Não implementada</span></td></tr>
-    <tr><td>Integração no engine-sim</td><td><span class="tag tag-tr">Não iniciada</span></td></tr>
+    <tr><th>Opção</th><th>Padrão</th><th>Função</th></tr>
+    <tr><td><code>--xcp [endereço[:porta]]</code></td><td><code>0.0.0.0:5555</code></td>
+        <td>Interface e porta onde o servidor escuta: todas (ferramenta neste ou em outro PC) ou <code>127.0.0.1</code> (só este PC)</td></tr>
+    <tr><td><code>--no-xcp</code></td><td>—</td><td>ECU sem servidor XCP</td></tr>
+    <tr><td><code>--xcp-clock ecu|pc</code></td><td><code>ecu</code></td>
+        <td>Carimbo de tempo do DAQ no relógio do controlador de I/O (o tempo simulado, com o simulador) ou no do PC</td></tr>
+    <tr><td><code>--xcp-log &lt;0..4&gt;</code></td><td><code>2</code></td><td>Mensagens de depuração do XCPlite (4 = todos os comandos)</td></tr>
   </table>
+  <p>Na partida a ECU grava o A2L <code>engine_sim_ecu.a2l</code> <b>na pasta de onde foi aberta</b>, com o
+     <code>XCP_104.aml</code> ao lado. O caminho completo aparece nas mensagens da janela da ECU:
+     <code>XCP: waiting on 0.0.0.0:5555, A2L C:\...\engine_sim_ecu.a2l</code>. A linha <b>XCP</b> da janela fica laranja
+     (esperando ferramenta) e verde quando o VISION conecta.</p>
 
-  <h2>Arquitetura prevista</h2>
+  <h2>O que o A2L contém</h2>
   <ul>
-    <li>O DCM continua sendo o armazenamento: carregado na partida, salvo quando pedido.</li>
-    <li>O XCPlite é o acesso ao vivo. O código da ECU lê sempre do segmento de calibração, nunca do DCM durante a execução.</li>
-    <li><b>Partida:</b> DCM → struct padrão → <code>XcpCreateCalSeg</code>. <b>Execução:</b> VISION ↔ XCP.
-        <b>Salvar:</b> cópia sob <code>XcpLockCalSeg</code> → DCM (ao fechar e/ou por um parâmetro <code>save_request</code>).</li>
-    <li>A lista de parâmetros declarada pelas funções da ECU (nome, unidade, limites, ordem) alimenta o A2L e o DCM.
-        Os nomes no DCM devem ser iguais aos do A2L.</li>
-    <li>A ECU roda no ritmo dela (lock e evento XCP no passo da ECU, não no passo da física).</li>
+    <li>Todos os parâmetros: <code>FESTWERT</code> como VALUE; curvas e mapas com eixos próprios editáveis
+        (<code>&lt;nome&gt;_X</code> / <code>&lt;nome&gt;_Y</code>, AXIS_PTS + COM_AXIS) e ponto de operação.</li>
+    <li>Todas as medições (FLOAT64), agrupadas em <code>Cal_&lt;função&gt;</code> e <code>Meas_&lt;função&gt;</code>.</li>
+    <li>Eventos DAQ cíclicos <code>Ecu_10ms</code> e <code>Ecu_100ms</code>.</li>
+    <li>EPK = versão do software da ECU (<code>ESIM_ECU_...</code>, mostrada no título da janela).</li>
   </ul>
 
-  <h2>Configuração do VISION (validada)</h2>
+  <h2>Conectar o VISION</h2>
   <ol>
-    <li>Device: <b>XCP Controller Device</b>. IP Settings: UDP, <b>Override Device Settings</b>, <code>127.0.0.1:5555</code>.</li>
-    <li>A cada A2L novo (os endereços mudam quando a struct muda): reimporte marcando <b>Replace existing data items</b> e
-        <b>Delete existing Device Settings and Memory Regions</b>, ou crie strategy e device do zero.
-        Sem isso o VISION mantém as regiões antigas e os parâmetros mostram <code>#NAN#</code>.</li>
-    <li>Só um processo pode usar a porta UDP 5555.</li>
+    <li>Device: <b>XCP Controller Device</b>. IP Settings: UDP, <b>Override Device Settings</b>, endereço e porta da ECU
+        (<code>127.0.0.1:5555</code> no mesmo PC).</li>
+    <li>Importe o <code>engine_sim_ecu.a2l</code>. A cada A2L novo (o código da ECU mudou e o EPK mudou), reimporte marcando
+        <b>Replace existing data items</b> e <b>Delete existing Device Settings and Memory Regions</b>. Sem isso o VISION
+        mantém as regiões antigas e os parâmetros mostram <code>#NAN#</code>.</li>
+    <li>Se o VISION avisar que a calibração é diferente, faça o upload ECU → PC: o arquivo DCM é a referência.</li>
   </ol>
+
+  <h2>Calibrar e salvar</h2>
+  <ul>
+    <li>Com o VISION conectado, <b>ele é dono da calibração</b>: salvar o <code>calibration.dcm</code> não recarrega (a linha
+        Calibration da janela fica azul). Salve o arquivo de novo depois de desconectar para carregá-lo.</li>
+    <li>Para gravar a calibração em uso no DCM: mude <code>CalSaveRequest</code> de 0 para 1. O arquivo é gravado com
+        <code>CalSaveRequest</code> = 0 e a versão anterior vai para <code>backup\</code> com data. Volte o parâmetro para 0
+        antes do próximo salvamento. <b>Nada é salvo ao fechar.</b></li>
+    <li>Sem ferramenta conectada, salvar o <code>calibration.dcm</code> continua recarregando ao vivo.</li>
+  </ul>
+
+  <div class="aviso">
+    <b>Atenção:</b> duas ECUs abertas com XCP na mesma porta iniciam sem erro (o XCPlite não reclama), e o VISION pode
+    conectar na errada. Use portas diferentes, por exemplo <code>--xcp 0.0.0.0:5556</code>.
+  </div>
 
   <h2>Pontos críticos para o VISION</h2>
   <ul>
     <li>Modo de endereçamento ACSDD (<code>OPTION_CAL_SEGMENTS_ABS</code>): o VISION ignora a address extension do A2L e
         sempre envia 0.</li>
-    <li>Só medições globais ou estáticas, com endereçamento absoluto.</li>
-    <li>Eventos com <code>XcpCreateEvent(nome, ciclo_ns, prioridade)</code>: eventos esporádicos fazem o VISION não configurar DAQ.</li>
-    <li>Espelho da página ativa para a Data List mostrar o valor escrito.</li>
-    <li>Eixos na struct (<code>AXIS_PTS</code> / <code>COM_AXIS</code>), nunca fixos no código.</li>
+    <li>Só medições globais ou estáticas, com endereçamento absoluto (por isso uma ECU por processo).</li>
+    <li>Eventos com tempo de ciclo: eventos esporádicos fazem o VISION não configurar DAQ.</li>
+    <li>Espelho da página ativa: a Data List mostra o valor escrito pela ferramenta.</li>
   </ul>
-  <p>Detalhes, diagnóstico e esqueleto de código em <code>XCP_Module/XCPLITE_ENGINE_SIM.md</code>.</p>
+  <p>Detalhes e diagnóstico em <code>XCP_Module/XCPLITE_ENGINE_SIM.md</code>.</p>
 
-  <div class="pendente">Atualize esta página quando a integração no simulador for feita: como ligar o XCP, onde o A2L é gerado,
-    e o procedimento de conexão do VISION passo a passo.</div>
+  <div class="pendente">Complete: projeto VISION padrão do laboratório (strategy, telas) e o "Act Rate" de 8,9 ms observado
+    em todos os itens.</div>
 
 </div>
 <div class="rodape">Volvo Group &middot; PEL CUR &middot; Comunicação &middot; Revisão 0.1</div>

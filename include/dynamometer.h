@@ -26,6 +26,12 @@ class Dynamometer : public atg_scs::Constraint {
 
         bool m_hold;
         bool m_enabled;
+
+        // Eddy current brake (EddyCurrentBrake): the shaft is always braked
+        // with m_brakeTorque, computed by the brake model every step; the
+        // fields above become the commands of its internal controller
+        bool m_eddyCurrent;
+        double m_brakeTorque;
 };
 
 #endif /* ATG_ENGINE_SIM_DYNAMOMETER_H */

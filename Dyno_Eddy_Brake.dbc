@@ -1,0 +1,87 @@
+VERSION ""
+
+NS_ :
+  NS_DESC_
+  CM_
+  BA_DEF_
+  BA_
+  VAL_
+  CAT_DEF_
+  CAT_
+  FILTER
+  BA_DEF_DEF_
+  EV_DATA_
+  ENVVAR_DATA_
+  SGTYPE_
+  SGTYPE_VAL_
+  BA_DEF_SGTYPE_
+  BA_SGTYPE_
+  SIG_TYPE_REF_
+  VAL_TABLE_
+  SIG_GROUP_
+  SIG_VALTYPE_
+  SIGTYPE_VALTYPE_
+  BO_TX_BU_
+  BA_DEF_REL_
+  BA_REL_
+  BA_DEF_DEF_REL_
+  BU_SG_REL_
+  BU_EV_REL_
+  BU_BO_REL_
+  SG_MUL_VAL_
+
+BS_ :
+
+BU_ : AUTOMATION BRAKE
+
+BO_ 768 DYNO_Command: 4 AUTOMATION
+  SG_ Load_Demand : 0|16@1+ (0.01,0) [0|100] "%" BRAKE
+  SG_ Coil_Enable : 16|1@1+ (1,0) [0|1] "" BRAKE
+  SG_ Alive_Counter : 24|8@1+ (1,0) [0|255] "" BRAKE
+
+BO_ 769 DYNO_Measure: 8 BRAKE
+  SG_ Torque : 0|16@1- (0.001,0) [-32.768|32.767] "Nm" AUTOMATION
+  SG_ Speed : 16|16@1+ (0.25,0) [0|16383.75] "rpm" AUTOMATION
+  SG_ Power : 32|16@1+ (1,0) [0|65535] "W" AUTOMATION
+  SG_ Alive_Counter : 48|8@1+ (1,0) [0|255] "" AUTOMATION
+  SG_ Ext_Demand_Active : 56|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Command_Timeout : 57|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Over_Power : 58|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Internal_Control : 59|1@1+ (1,0) [0|1] "" AUTOMATION
+
+BO_ 770 DYNO_Status: 6 BRAKE
+  SG_ Load_Applied : 0|16@1+ (0.01,0) [0|100] "%" AUTOMATION
+  SG_ Duty : 16|16@1+ (0.01,0) [0|100] "%" AUTOMATION
+  SG_ Excitation : 32|16@1+ (0.01,0) [0|100] "%" AUTOMATION
+
+BO_ 771 ENGINE_Command: 4 AUTOMATION
+  SG_ Ignition : 0|1@1+ (1,0) [0|1] "" BRAKE
+  SG_ Starter : 1|1@1+ (1,0) [0|1] "" BRAKE
+  SG_ Throttle : 8|16@1+ (0.01,0) [0|100] "%" BRAKE
+  SG_ Alive_Counter : 24|8@1+ (1,0) [0|255] "" BRAKE
+
+BO_ 772 ENGINE_Status: 3 BRAKE
+  SG_ Remote : 0|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Ignition_State : 1|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Starter_State : 2|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Command_Timeout : 3|1@1+ (1,0) [0|1] "" AUTOMATION
+  SG_ Throttle_Applied : 8|16@1+ (0.01,0) [0|100] "%" AUTOMATION
+
+CM_ BO_ 768 "AUTOMATION->BRAKE. Load demand computed by the automation's speed / torque PID. Without it for 0.5 s the brake falls back to its internal controller (or coil off)";
+CM_ BO_ 769 "BRAKE->AUTOMATION, every 10 ms";
+CM_ BO_ 770 "BRAKE->AUTOMATION, every 100 ms";
+CM_ BO_ 771 "AUTOMATION->ENGINE, cyclic (20 ms). While it keeps coming the automation is in control (remote); 0.5 s without it: throttle 0, starter and ignition off, back to manual";
+CM_ BO_ 772 "ENGINE->AUTOMATION, every 100 ms";
+CM_ SG_ 768 Load_Demand "Percent of the brake's maximum torque at the present speed: torque = drag + load x (maximum - drag). The brake's controller linearises the coil PWM";
+CM_ SG_ 768 Coil_Enable "1 = coil driven, 0 = coil off";
+CM_ SG_ 769 Torque "Load cell on the brake housing (electromagnetic torque, not the shaft torque)";
+CM_ SG_ 769 Speed "Speed sensor, pulses counted over 10 ms";
+CM_ SG_ 769 Ext_Demand_Active "Load from DYNO_Command";
+CM_ SG_ 769 Command_Timeout "DYNO_Command stopped for more than 0.5 s";
+CM_ SG_ 769 Over_Power "Braking power above the brake's rating (6 PS)";
+CM_ SG_ 769 Internal_Control "Load from the brake's internal controller";
+CM_ SG_ 770 Load_Applied "Load applied (DYNO_Command or internal controller)";
+CM_ SG_ 770 Duty "Coil PWM duty";
+CM_ SG_ 770 Excitation "Coil current / maximum, after the magnetic circuit's lag";
+CM_ SG_ 772 Remote "1 = the automation is in control (ENGINE_Command coming)";
+CM_ SG_ 772 Command_Timeout "ENGINE_Command stopped: back to manual in a safe state";

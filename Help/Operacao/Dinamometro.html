@@ -27,6 +27,11 @@
         <td>Aplica um torque de frenagem fixo; a rotação fica onde o motor equilibra.</td></tr>
   </table>
 
+  <p>Esta tabela é o dinamômetro ideal (<code>ENGINE_SIM_DYNO_MODEL=ideal</code>): trava a rotação e responde na hora, como
+     o motor síncrono do CFR. O padrão é o freio do banco de motores pequenos (só absorve, responde em segundos, PWM da
+     bobina pelo CAN), em que estes comandos viram o alvo do controlador interno do freio; veja
+     <a href="Freio_Correntes_Parasitas.html">Freio de correntes parasitas</a>.</p>
+
   <h2>Rotação constante pelo teclado</h2>
   <ol>
     <li>Com o motor funcionando, pressione <b>D</b> (luz <i>Dyno.</i> acende) e <b>H</b> (luz <i>Hold</i> acende).

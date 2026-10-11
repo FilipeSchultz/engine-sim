@@ -164,6 +164,20 @@ void IndicatingSystem::sample(Engine *engine, double dt) {
         while (cylinder.samples.size() > 2 && cylinder.samples.front().angle < keepFrom) {
             cylinder.samples.pop_front();
         }
+
+        // The crank angle doesn't advance with the engine stopped (or nearly):
+        // also drop what is older than any cycle worth analysing (720 deg at
+        // 40 rpm takes 3 s), or the buffer grows by MBs per second
+        constexpr double MaxSampleAge = 3.0;    // [s]
+        while (cylinder.samples.size() > 2 && cylinder.samples.front().time < m_time - MaxSampleAge) {
+            cylinder.samples.pop_front();
+        }
+        while (!cylinder.pendingTdc.empty()
+            && (cylinder.samples.empty() || cylinder.pendingTdc.front() - 360.0 < cylinder.samples.front().angle))
+        {
+            // Its start was dropped: the cycle can't be analysed any more
+            cylinder.pendingTdc.pop_front();
+        }
     }
 
     m_fuelEnergyDensity = engine->getFuel()->getEnergyDensity();

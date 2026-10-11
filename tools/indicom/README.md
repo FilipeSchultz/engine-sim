@@ -16,7 +16,8 @@ py -3.12 -m venv .venv
 
 ## Running
 
-Double-click `iniciar_com_simulador.bat`, or manually:
+Double-click `iniciar_com_simulador.bat` (simulator + IndiCom) or
+`iniciar_indicom.bat` (IndiCom only), or manually:
 
 ```bat
 set ENGINE_SIM_INDI_UDP=127.0.0.1:5005

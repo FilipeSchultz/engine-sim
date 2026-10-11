@@ -1,8 +1,7 @@
 #include "ecu/link.h"
 
-#include "ecu/host.h"
-
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -88,6 +87,22 @@ namespace {
         std::memcpy(&out->sin_addr, ip, 4);
         return true;
     }
+}
+
+bool ecu::parseIpv4(const std::string &text, uint8_t address[4]) {
+    int a = 0, b = 0, c = 0, d = 0;
+    char end = 0;
+    if (std::sscanf(text.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &end) != 4) return false;
+
+    for (const int v : { a, b, c, d }) {
+        if (v < 0 || v > 255) return false;
+    }
+
+    address[0] = (uint8_t)a;
+    address[1] = (uint8_t)b;
+    address[2] = (uint8_t)c;
+    address[3] = (uint8_t)d;
+    return true;
 }
 
 void ecu::link::encodeSample(const Sample &sample, Frame frames[3]) {

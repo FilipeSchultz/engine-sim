@@ -9,6 +9,8 @@ Dynamometer::Dynamometer() : atg_scs::Constraint(1, 1) {
     m_ks = 10.0;
     m_kd = 1.0;
     m_maxTorque = units::torque(10000.0, units::ft_lb);
+    m_eddyCurrent = false;
+    m_brakeTorque = 0.0;
 
     m_torqueSetpoint = 0.0;
     m_torqueMode = false;
@@ -39,13 +41,16 @@ void Dynamometer::calculate(Output *output, atg_scs::SystemState *state) {
 
     output->C[0] = 0;
 
-    if (m_torqueMode) {
+    if (m_eddyCurrent || m_torqueMode) {
         // Try to stop the shaft, but only with up to m_torqueSetpoint of braking
         // torque: while the engine keeps turning, the constraint stays saturated
         // at the limit, i.e. it applies a constant braking torque
-        const double brakingTorque = m_enabled
-            ? std::fmin(std::fmax(m_torqueSetpoint, 0.0), m_maxTorque)
-            : 0.0;
+        // (eddy current brake: the brake model's torque, coil on or off)
+        const double brakingTorque = m_eddyCurrent
+            ? std::fmin(std::fmax(m_brakeTorque, 0.0), m_maxTorque)
+            : m_enabled
+                ? std::fmin(std::fmax(m_torqueSetpoint, 0.0), m_maxTorque)
+                : 0.0;
 
         output->v_bias[0] = 0;
         if (m_bodies[0]->v_theta < 0) {

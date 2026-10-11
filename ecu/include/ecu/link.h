@@ -33,6 +33,9 @@
 //                   flags      u8   bit 0 fuel control, bit 1 spark control
 //                   counter    u8   counter of the sample answered
 namespace ecu {
+    // "a.b.c.d" -> address; false if malformed
+    bool parseIpv4(const std::string &text, uint8_t address[4]);
+
     namespace link {
         constexpr uint32_t SensorsId = 0x100;
         constexpr uint32_t Sensors2Id = 0x101;

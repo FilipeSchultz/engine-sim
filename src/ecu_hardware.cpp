@@ -1,6 +1,5 @@
 #include "../include/ecu_hardware.h"
 
-#include "../include/ecu_learner.h"
 #include "../include/engine.h"
 #include "../include/units.h"
 #include "../include/constants.h"
@@ -10,7 +9,7 @@
 #include <cmath>
 
 namespace {
-    // External ECU (I/O controller side of ecu/link.h)
+    // I/O controller side of ecu/link.h
     constexpr double SamplePeriod_s = 0.010;
     constexpr double PollPeriod_s = 0.001;          // commands read between samples
     constexpr double CommandTimeout_s = 0.1;        // fail-safe without commands
@@ -19,6 +18,10 @@ namespace {
 
     // No crank signal, no injection: below this speed the angle only jitters
     constexpr double MinRpm = 10.0;
+
+    // Wideband sensor measuring range (Bosch LSU type: 0.65 .. air)
+    constexpr double SensorMinLambda = 0.65;
+    constexpr double SensorMaxLambda = 6.5;
 }
 
 bool EcuHardware::openLink(const LinkSettings &settings, std::string *error) {
@@ -41,15 +44,17 @@ EcuHardware::LinkState EcuHardware::linkState() const {
 }
 
 double EcuHardware::averagedMap_kPa() const {
-    if (m_link.isOpen()) return m_avgMap_kPa;
-    return (m_ecu != nullptr) ? m_ecu->signals().map_kPa : 0.0;
+    return m_avgMap_kPa;
 }
 
 void EcuHardware::attach(Engine *engine) {
     m_attached = engine;
     m_time = 0;
-    m_lambda = 0;
     m_iatValid = false;
+    m_exhaustParcels.clear();
+    m_exhaustVolume = 0;
+    m_sensorGas = m_sensorSignal = 0;
+    m_sensorReady = false;
     m_outputs = ecu::EcuOutputs();
 
     m_commandValid = false;
@@ -65,37 +70,23 @@ void EcuHardware::attach(Engine *engine) {
 
     if (engine == nullptr) return;
 
-    // Variant coding: cylinder count and firing TDCs on the cam cycle (the
-    // spark plugs fire at these angles minus the advance)
+    // Cylinder count and firing TDCs on the cam cycle (the spark plugs fire
+    // at these angles minus the advance; the injection angle is before them)
     IgnitionModule *ignition = engine->getIgnitionModule();
     m_config = ecu::EcuConfig();
     m_config.cylinders = engine->getCylinderCount();
     for (int i = 0; i < m_config.cylinders; ++i) {
         m_config.firingTdc_deg.push_back(units::convert(ignition->getFiringAngle(i), units::deg));
     }
-
-    if (m_ecu != nullptr && !m_link.isOpen()) {
-        m_ecu->configure(m_config);
-        if (m_learner != nullptr) m_learner->reset();
-    }
 }
 
 void EcuHardware::step(Engine *engine, double dt) {
-    if (m_ecu == nullptr && !m_link.isOpen()) return;
+    if (!m_link.isOpen()) return;
     if (engine != m_attached) attach(engine);
 
     readSensors(engine, dt);
-    if (m_link.isOpen()) {
-        stepIoController(dt);
-    }
-    else {
-        m_ecu->step(m_inputs, dt, &m_outputs);
-    }
+    stepIoController(dt);
     driveActuators(engine);
-
-    if (m_learner != nullptr && !m_link.isOpen()) {
-        m_learner->sample(engine, *m_ecu, m_outputs, dt);
-    }
 }
 
 void EcuHardware::readSensors(Engine *engine, double dt) {
@@ -121,19 +112,74 @@ void EcuHardware::readSensors(Engine *engine, double dt) {
     }
     m_inputs.iat_C = m_iat_C;
 
-    m_inputs.clt_C = m_coolantTemperature_C;
+    m_inputs.clt_C = (engine->getCoolantTemperature() - units::celcius(0.0)) / units::C;
     m_inputs.tps_percent = 100.0 * engine->getThrottlePlateAngle() / (constants::pi / 2);
 
-    // Wideband lambda: not ready until the first combustion
-    const double lambda = engine->getCylinderLambda();
-    if (lambda > 0) {
-        m_lambda = (m_lambda > 0)
-            ? m_lambda + (lambda - m_lambda) * dt / (m_lambdaTimeConstant_s + dt)
-            : lambda;
-    }
-    m_inputs.lambda = m_lambda;
+    readLambdaSensor(engine, dt);
 
     m_inputs.battery_V = 14.0;
+}
+
+void EcuHardware::readLambdaSensor(Engine *engine, double dt) {
+    // Exhaust gas pushed out of the cylinders in the last step, with the O2
+    // and fuel of the charge it was burned from (what a wideband sensor
+    // measures, whatever the combustion did with them)
+    double volume = 0, o2 = 0, fuel = 0;
+    for (int i = 0; i < engine->getCylinderCount(); ++i) {
+        const CombustionChamber *chamber = engine->getChamber(i);
+        const double n = chamber->getLastTimestepExhaustFlow();
+        if (n <= 0 || !chamber->hasCharge()) continue;
+
+        const GasSystem &runner = chamber->m_exhaustRunnerAndPrimary;
+        volume += n * constants::R * runner.temperature() / runner.pressure();
+        o2 += n * chamber->getChargeMix().p_o2;
+        fuel += n * chamber->getChargeMix().p_fuel;
+    }
+
+    if (volume > 0) {
+        m_exhaustVolume += volume;
+        m_exhaustParcels.push_back({ m_exhaustVolume, o2, fuel });
+    }
+
+    // Plug flow: a parcel reaches the sensor once the exhaust behind it has
+    // pushed it through the volume between the valves and the sensor (the
+    // transport delay shrinks as the exhaust flow grows)
+    const double reached = m_exhaustVolume - engine->getLambdaSensorVolume();
+    double arrivedO2 = 0, arrivedFuel = 0;
+    bool arrived = false;
+    while (!m_exhaustParcels.empty() && m_exhaustParcels.front().volume <= reached) {
+        arrivedO2 += m_exhaustParcels.front().o2;
+        arrivedFuel += m_exhaustParcels.front().fuel;
+        m_exhaustParcels.pop_front();
+        arrived = true;
+    }
+
+    // The sensor's pump current is about linear in 1 - 1/lambda (excess O2
+    // when lean, O2 demand of CO / H2 when rich): its response is filtered
+    // on that scale
+    constexpr double MinGas = 1 - 1 / SensorMinLambda;
+    constexpr double MaxGas = 1 - 1 / SensorMaxLambda;
+    if (arrived && arrivedO2 + arrivedFuel > 0) {
+        const double afr = engine->getFuel()->getMolecularAfr();
+        m_sensorGas = (arrivedO2 > 0)
+            ? std::clamp(1 - afr * arrivedFuel / arrivedO2, MinGas, MaxGas)
+            : MinGas;
+
+        if (!m_sensorReady) {
+            m_sensorSignal = m_sensorGas;
+            m_sensorReady = true;
+        }
+    }
+
+    // Not ready (0) until exhaust gas has reached the sensor
+    if (m_sensorReady) {
+        const double tau = engine->getLambdaSensorTimeConstant();
+        m_sensorSignal += (m_sensorGas - m_sensorSignal) * dt / (tau + dt);
+        m_inputs.lambda = 1 / (1 - m_sensorSignal);
+    }
+    else {
+        m_inputs.lambda = 0;
+    }
 }
 
 void EcuHardware::stepIoController(double dt) {

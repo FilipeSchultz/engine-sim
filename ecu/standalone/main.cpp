@@ -53,10 +53,12 @@ namespace {
     }
 
     struct Options {
-        std::string calibration = "calibration.dcm";
+        std::string calibration;        // empty: defaultCalibration()
         std::string log;
 
-        bool xcp = false;
+        // XCP server on by default; --no-xcp turns it off
+        bool xcp = true;
+        bool xcpRequested = false;      // --xcp given: a build without XCP is an error
         std::string xcpEndpoint;
         std::string xcpClock = "ecu";
         int xcpLog = 2;
@@ -85,9 +87,13 @@ namespace {
             "Usage: ecu-standalone [options]\n"
             "\n"
             "  --cal <file.dcm>        calibration file, reloaded whenever it is saved\n"
-            "                          (default calibration.dcm; written with the\n"
-            "                          defaults if missing)\n"
-            "  --xcp [address[:port]]  XCP on Ethernet server (default 0.0.0.0:5555)\n"
+            "                          (default: the repository's\n"
+            "                          assets\\calibration\\calibration.dcm, found from\n"
+            "                          the executable's folder up, else calibration.dcm\n"
+            "                          here; written with the defaults if missing)\n"
+            "  --xcp [address[:port]]  XCP on Ethernet server address (default\n"
+            "                          0.0.0.0:5555); the server is always on\n"
+            "  --no-xcp                no XCP server\n"
             "  --xcp-clock ecu|pc      DAQ timestamps in I/O controller time (default)\n"
             "                          or PC time\n"
             "  --xcp-log <0..4>        XCPlite debug output (default 2)\n"
@@ -111,6 +117,30 @@ namespace {
             "sample every 10 ms and gets the ECU's command back). With --stimulus,\n"
             "type k=v,... and Enter to change the inputs (console or window), an\n"
             "empty line to show them, q to quit.\n");
+    }
+
+    // Without --cal: the repository's calibration, looked for from the
+    // executable's folder up (build\ecu\Release -> assets\calibration), so
+    // a double click opens the lab calibration; else calibration.dcm in the
+    // working directory
+    std::string defaultCalibration() {
+        std::filesystem::path dir;
+#ifdef _WIN32
+        wchar_t exe[MAX_PATH];
+        const DWORD length = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        if (length > 0 && length < MAX_PATH) dir = std::filesystem::path(exe).parent_path();
+#endif
+
+        std::error_code ec;
+        for (int level = 0; level < 6 && !dir.empty(); ++level) {
+            const std::filesystem::path candidate = dir / "assets" / "calibration" / "calibration.dcm";
+            if (std::filesystem::exists(candidate, ec)) return candidate.string();
+
+            if (dir == dir.parent_path()) break;
+            dir = dir.parent_path();
+        }
+
+        return "calibration.dcm";
     }
 
     bool parseNumber(const std::string &text, double *value) {
@@ -170,7 +200,11 @@ namespace {
             }
             else if (arg == "--xcp") {
                 options->xcp = true;
+                options->xcpRequested = true;
                 if (hasValue) options->xcpEndpoint = argv[++i];
+            }
+            else if (arg == "--no-xcp") {
+                options->xcp = false;
             }
             else if (arg == "--xcp-clock") {
                 if (!value(&options->xcpClock)) return false;
@@ -231,6 +265,7 @@ namespace {
         }
 
         if (options->status < 0) options->status = options->window ? 0 : 1;
+        if (options->calibration.empty()) options->calibration = defaultCalibration();
 
         return true;
     }
@@ -320,12 +355,15 @@ namespace {
             ecu::EcuHost host(ecu);
             host.setMessageHandler(report);
 
+            // XCP is on by default, but a build without it still runs
+            const bool xcp = options.xcp && (ecu::XcpInterface::available() || options.xcpRequested);
+
             std::error_code ec;
             const std::string calibrationFile = std::filesystem::absolute(options.calibration, ec).string();
             Board.update([&](EcuStatus &s) {
                 s.software = ecu.epk();
                 s.calibrationFile = calibrationFile;
-                s.xcpEnabled = options.xcp;
+                s.xcpEnabled = xcp;
                 s.logFile = options.log;
                 s.link = link.describe();
                 s.linkHasController = link.hasController();
@@ -334,7 +372,10 @@ namespace {
             report("ECU software " + ecu.epk());
             host.openCalibration(options.calibration);
 
-            if (options.xcp) {
+            if (options.xcp && !xcp) {
+                report("XCP: not in this build (CMake option ECU_XCP_ENABLED), running without it");
+            }
+            if (xcp) {
                 ecu::XcpSettings settings;
                 if (!xcpSettings(options, &settings)) return fail();
 
@@ -457,7 +498,18 @@ int main(int argc, char **argv) {
 
     std::signal(SIGINT, onSignal);
 #ifdef _WIN32
-    // 1 ms sleep resolution for the 10 ms pacing
+    // 1 ms sleep resolution for the 10 ms pacing, kept while the window is
+    // in the background or hidden (Windows 11 drops it otherwise), no
+    // throttling onto efficiency cores: the simulator waits for the ECU's
+    // answers in lockstep
+    PROCESS_POWER_THROTTLING_STATE throttling = {};
+    throttling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    throttling.ControlMask =
+        PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    throttling.StateMask = 0;
+    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &throttling, sizeof(throttling));
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
     timeBeginPeriod(1);
 #endif
 

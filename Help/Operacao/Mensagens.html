@@ -14,8 +14,8 @@
 
   <p>O painel de informações (canto superior esquerdo da tela principal) mostra sempre a <b>última</b> mensagem.
      Na partida, as mensagens do CAN, da ECU e da indicação aparecem em sequência e só a última fica visível;
-     se precisar conferir uma delas, pressione <b>Enter</b> (recarregar o motor) ou salve o <code>calibration.dcm</code>
-     para gerar a mensagem da ECU de novo.</p>
+     se precisar conferir uma delas, pressione <b>Enter</b> (recarregar o motor). As mensagens da própria ECU (calibração,
+     XCP, datalog) aparecem na lista <b>Messages</b> da janela do <code>ecu-standalone</code>.</p>
 
   <h2>CAN</h2>
   <table>
@@ -38,14 +38,30 @@
             outro programa (CanKing, automação) não abriu o canal em modo exclusivo</td></tr>
   </table>
 
-  <h2>ECU</h2>
+  <h2>Link com a ECU (painel do simulador)</h2>
+  <table>
+    <tr><th>Mensagem</th><th>Significado</th><th>O que fazer</th></tr>
+    <tr><td><code>ECU link: waiting for ecu-standalone on 127.0.0.1:5600 (lockstep)</code></td>
+        <td>Simulador pronto, ainda sem resposta da ECU. O motor roda com a mistura e o avanço do script</td>
+        <td>Abra o <code>ecu-standalone</code></td></tr>
+    <tr><td><code>ECU link: ecu-standalone connected</code></td><td>A ECU respondeu e controla injeção e ignição</td><td>—</td></tr>
+    <tr><td><code>ECU link: no command for 0.1 s, ECU outputs cut (...)</code></td>
+        <td>A ECU parou de responder (fechada, travada); fail-safe: o motor volta para o script</td>
+        <td>Abra a ECU de novo: ela reassume sozinha</td></tr>
+    <tr><td><code>ECU link: invalid address ...</code> / <code>ECU link: cannot ...</code></td>
+        <td><code>ENGINE_SIM_ECU_LINK_ADDRESS</code> mal formatado ou socket UDP indisponível</td>
+        <td>Use <code>IPv4:porta</code>, ex.: <code>127.0.0.1:5600</code></td></tr>
+  </table>
+
+  <h2>ECU (janela do ecu-standalone)</h2>
   <table>
     <tr><th>Mensagem</th><th>Significado</th><th>O que fazer</th></tr>
     <tr><td><code>ECU: calibration loaded (fuel ON, ignition ON)</code></td>
         <td><code>calibration.dcm</code> lido e aplicado. ON/OFF indica <code>EcuFuelEnable</code> e <code>EcuIgnEnable</code></td><td>—</td></tr>
     <tr><td><code>... - N parameter(s) not in the file kept their values (...)</code></td>
         <td>O arquivo não tem todos os parâmetros da ECU; os que faltam mantêm o valor atual (na partida, o padrão)</td>
-        <td>Normal em arquivos antigos. Para completar, gere um DCM novo (aprendizado) e copie os blocos que faltam</td></tr>
+        <td>Normal em arquivos antigos. Para completar, salve a calibração pela ECU (<code>CalSaveRequest</code>): o arquivo
+            salvo tem todos os parâmetros</td></tr>
     <tr><td><code>... unknown parameter 'X' ignored</code></td><td>O arquivo tem um parâmetro que esta ECU não conhece</td><td>Confira o nome</td></tr>
     <tr><td><code>... blocks are not supported, skipped</code></td>
         <td>Blocos DCM não suportados (<code>FESTWERTEBLOCK</code>, <code>STUETZSTELLENVERTEILUNG</code>, <code>GRUPPENKENNFELD</code>…)</td>
@@ -56,7 +72,7 @@
             <b>A ECU continua com a calibração anterior</b></td>
         <td>Corrija a linha indicada e salve de novo</td></tr>
     <tr><td><code>ECU: cannot open ...</code> / <code>ECU: cannot write ...</code></td>
-        <td>Arquivo DCM inacessível (ou o arquivo do aprendizado não pôde ser gravado)</td><td>Confira caminho e permissões</td></tr>
+        <td>Arquivo DCM inacessível</td><td>Confira caminho e permissões</td></tr>
   </table>
 
   <h2>Indicação</h2>

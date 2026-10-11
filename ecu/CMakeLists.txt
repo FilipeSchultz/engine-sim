@@ -1,13 +1,29 @@
 # Virtual ECU: self-contained library, no dependency on the simulation.
 # The simulation drives it through ecu/io.h (sensors in, actuators out).
 
+# The ECU's interface and link protocol: all an I/O controller needs (the
+# simulator), without the ECU itself
+add_library(engine-sim-ecu-link STATIC
+    src/link.cpp
+
+    include/ecu/io.h
+    include/ecu/link.h
+)
+
+target_include_directories(engine-sim-ecu-link PUBLIC include)
+target_compile_features(engine-sim-ecu-link PUBLIC cxx_std_17)
+
+if (WIN32)
+    # UDP (Windows sockets)
+    target_link_libraries(engine-sim-ecu-link PUBLIC ws2_32)
+endif ()
+
 add_library(engine-sim-ecu STATIC
     # Core
     src/calibration.cpp
     src/dcm_file.cpp
     src/ecu.cpp
     src/host.cpp
-    src/link.cpp
     src/xcp_interface.cpp
 
     # Functions (control logic)
@@ -24,19 +40,13 @@ add_library(engine-sim-ecu STATIC
     include/ecu/function.h
     include/ecu/functions.h
     include/ecu/host.h
-    include/ecu/io.h
-    include/ecu/link.h
     include/ecu/measurement.h
     include/ecu/signals.h
     include/ecu/xcp.h
 )
 
 target_include_directories(engine-sim-ecu PUBLIC include)
-
-if (WIN32)
-    # I/O link over UDP (Windows sockets)
-    target_link_libraries(engine-sim-ecu PUBLIC ws2_32)
-endif ()
+target_link_libraries(engine-sim-ecu PUBLIC engine-sim-ecu-link)
 target_compile_features(engine-sim-ecu PUBLIC cxx_std_17)
 
 # XCP on Ethernet (measurement and calibration with ATI VISION, CANape...)

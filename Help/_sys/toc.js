@@ -27,6 +27,7 @@ window.HELP_TOC = [
       { titulo: 'Controles do teclado',   pagina: 'Operacao/Controles.html' },
       { titulo: 'Telas e instrumentos',   pagina: 'Operacao/Telas.html' },
       { titulo: 'Dinamômetro',            pagina: 'Operacao/Dinamometro.html' },
+      { titulo: 'Freio de correntes parasitas', pagina: 'Operacao/Freio_Correntes_Parasitas.html' },
       { titulo: 'Mensagens do sistema',   pagina: 'Operacao/Mensagens.html' }
     ]
   },
@@ -58,7 +59,6 @@ window.HELP_TOC = [
       { titulo: 'Parâmetros de calibração', pagina: 'ECU/Parametros.html' },
       { titulo: 'Medições e datalog',       pagina: 'ECU/Medicoes.html' },
       { titulo: 'Arquivo DCM',              pagina: 'ECU/Arquivo_DCM.html' },
-      { titulo: 'Aprendizado de mapas',     pagina: 'ECU/Aprendizado.html' },
       { titulo: 'Sensores e atuadores',     pagina: 'ECU/Sensores.html' },
       { titulo: 'ECU standalone',           pagina: 'ECU/ECU_Standalone.html' },
       { titulo: 'Estender a ECU',           pagina: 'ECU/Desenvolvimento.html' }

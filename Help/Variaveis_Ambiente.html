@@ -27,6 +27,11 @@ Release\engine-sim-app.exe</code></pre>
     <tr><th>Variável</th><th>Padrão</th><th>Função</th></tr>
     <tr><td><code>ENGINE_SIM_CAN_CHANNEL</code></td><td>0</td><td>Canal Kvaser (0 = primeiro canal da interface)</td></tr>
     <tr><td><code>ENGINE_SIM_CAN_BITRATE</code></td><td>500000</td><td>Taxa em bit/s: 125000, 250000, 500000 ou 1000000</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_PROTOCOL</code></td><td>(banco)</td><td>Protocolo do banco (<code>Dyno_Eddy_Brake.dbc</code>:
+        carga do freio e comando do motor). <code>emcon</code> volta ao AVL EMCON (as variáveis abaixo, até
+        <code>_FILTER_MS</code>, só valem com ele)</td></tr>
+    <tr><td><code>ENGINE_SIM_CAN_TIMEOUT_MS</code></td><td>500</td><td>Protocolo do banco: tempo sem <code>ENGINE_Command</code>
+        até voltar para manual (acelerador 0, partida e ignição desligadas)</td></tr>
     <tr><td><code>ENGINE_SIM_CAN_LIFESIGNAL_TIMEOUT_MS</code></td><td>0 (desligado)</td>
         <td>Tempo máximo sem mudança do <code>LifesignalFeedback</code> do HOST em modo remoto. Ao estourar,
             o simulador volta para Manual com falha. O DBC especifica 100 ms.</td></tr>
@@ -34,6 +39,10 @@ Release\engine-sim-app.exe</code></pre>
     <tr><td><code>ENGINE_SIM_DYNO_TORQUE_RAMP_NM_S</code></td><td>2000</td><td>Rampa da demanda de torque [Nm/s] (0 = degrau)</td></tr>
     <tr><td><code>ENGINE_SIM_DYNO_TORQUE_NOISE_NM</code></td><td>1.0</td><td>Ruído gaussiano da célula de carga, desvio padrão [Nm] (0 = sem ruído)</td></tr>
     <tr><td><code>ENGINE_SIM_DYNO_TORQUE_FILTER_MS</code></td><td>50</td><td>Constante de tempo do filtro da medição de torque [ms] (0 = sem filtro)</td></tr>
+    <tr><td><code>ENGINE_SIM_DYNO_MODEL</code></td><td>(freio)</td><td>Padrão: freio de correntes parasitas do banco, carga (0 a 100 %) pelo CAN.
+        <code>ideal</code>: dinamômetro que trava a rotação e gira o motor (CFR). O freio e as variáveis <code>ENGINE_SIM_DYNO_BRAKE_GAIN</code>, <code>_ROTOR_INERTIA</code>,
+        <code>_CAN_ID</code>, <code>_TORQUE_KP/TI</code>, <code>_SPEED_KP/KI</code> e <code>_LOG</code> estão em
+        <a href="Operacao/Freio_Correntes_Parasitas.html">Freio de correntes parasitas</a></td></tr>
   </table>
 
   <h2>ECU virtual</h2>
@@ -42,20 +51,13 @@ Release\engine-sim-app.exe</code></pre>
     <tr><th>Variável</th><th>Exemplo</th><th>Função</th></tr>
     <tr><td><code>ENGINE_SIM_ECU_LOG</code></td><td><code>C:\temp\ecu.csv</code></td>
         <td>Datalog a 20 Hz com todas as medições da ECU, mais λ real do cilindro, AFR, pedal e torque do dinamômetro.
-            Veja <a href="ECU/Medicoes.html">Medições e datalog</a>. Com o link ligado, grava o lado do controlador de I/O
-            (estado do link, comando aplicado, valores da planta); o datalog da ECU é o <code>--log</code> do
-            <code>ecu-standalone</code>.</td></tr>
-    <tr><td><code>ENGINE_SIM_ECU_LINK</code></td><td><code>1</code></td>
-        <td>ECU externa: o motor é controlado pelo <code>ecu-standalone</code> via UDP (<code>1</code> liga, <code>0</code> desliga;
-            sobrepõe <code>set_ecu_settings(link: ...)</code>). Veja <a href="ECU/ECU_Standalone.html">ECU standalone</a>.</td></tr>
+            Veja <a href="ECU/Medicoes.html">Medições e datalog</a>.</td></tr>
     <tr><td><code>ENGINE_SIM_ECU_LINK_ADDRESS</code></td><td><code>127.0.0.1:5600</code></td>
-        <td>Onde o <code>ecu-standalone</code> escuta (endereço[:porta]).</td></tr>
+        <td>Onde o <code>ecu-standalone</code> escuta (endereço[:porta]); sobrepõe <code>set_ecu_settings</code>.
+            Veja <a href="ECU/ECU_Standalone.html">ECU standalone</a>.</td></tr>
     <tr><td><code>ENGINE_SIM_ECU_LINK_SYNC</code></td><td><code>lockstep</code></td>
         <td><code>lockstep</code>: o simulador espera o comando de cada amostra (mesmo resultado da ECU interna);
             <code>free</code>: nunca espera, como numa bancada real.</td></tr>
-    <tr><td><code>ENGINE_SIM_ECU_LEARN</code></td><td><code>C:\temp\novo.dcm</code></td>
-        <td>Liga o aprendizado de mapas: grava a cada 10 s e ao fechar um DCM aprendido do comportamento do script.
-            Veja <a href="ECU/Aprendizado.html">Aprendizado de mapas</a>.</td></tr>
   </table>
 
   <h2>Execução sem operador</h2>
@@ -66,12 +68,14 @@ Release\engine-sim-app.exe</code></pre>
     <tr><td><code>ENGINE_SIM_AUTOSTART</code></td><td><code>3</code></td>
         <td>Liga a ignição e aciona o motor de partida por este tempo [s] (<code>0</code> = só a ignição).</td></tr>
     <tr><td><code>ENGINE_SIM_DYNO_HOLD</code></td><td><code>600</code></td>
-        <td>Liga o dinamômetro mantendo esta rotação [rpm], como se faz com o CFR (motorizado até a rotação, não partido).</td></tr>
+        <td>Liga o dinamômetro mantendo esta rotação [rpm]. Para motorizar o CFR até a rotação (sem partida) use também
+            <code>ENGINE_SIM_DYNO_MODEL=ideal</code>; com o freio é só o alvo do controlador interno.</td></tr>
     <tr><td><code>ENGINE_SIM_THROTTLE</code></td><td><code>1.0</code></td>
         <td>Borboleta com nenhuma tecla de acelerador pressionada (0 a 1).</td></tr>
   </table>
 
 <pre><code>set ENGINE_SIM_AUTOSTART=0
+set ENGINE_SIM_DYNO_MODEL=ideal
 set ENGINE_SIM_DYNO_HOLD=600
 set ENGINE_SIM_THROTTLE=1.0
 Release\engine-sim-app.exe</code></pre>

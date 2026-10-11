@@ -24,10 +24,8 @@
 #include "transmission.h"
 #include "can_interface.h"
 #include "avl_emcon.h"
-#include "ecu/ecu.h"
-#include "ecu/host.h"
+#include "dyno_can.h"
 #include "ecu_hardware.h"
-#include "ecu_learner.h"
 #include "indicating_system.h"
 #include "udp_sender.h"
 
@@ -114,9 +112,6 @@ class EngineSimApplication {
         void updateIndicating(double dt);
         void sendIndicatingData();
         void sendIndicatingInfo();
-        void saveLearnedCalibration();
-        void initializeXcp();
-        bool initializeEcuLink();
         void onEcuSettings(const EcuScriptSettings &settings);
 
         void openCan();
@@ -125,24 +120,19 @@ class EngineSimApplication {
         void setCanRemote(bool remote);
         bool isCanRemote() const { return m_canRemote; }
 
+        void configureDyno();
+        void updateDyno(double dt);
+
     protected:
-        // Virtual ECU; the host keeps its calibration file (reloaded whenever
-        // it is saved), XCP server and datalog
-        ecu::Ecu m_ecu;
-        ecu::EcuHost m_ecuHost;
+        // The ECU's I/O controller; the ECU is ecu-standalone. Optional CSV
+        // datalog of the link (ENGINE_SIM_ECU_LOG)
         EcuHardware m_ecuHardware;
-        EcuLearner m_ecuLearner;
         EcuScriptSettings m_ecuScriptSettings;
         EcuHardware::LinkState m_ecuLinkState = EcuHardware::LinkState::Off;
         std::ofstream m_ecuLinkLog;
         double m_ecuLinkLogTime = 0.0;
         double m_ecuLinkLogTimer = 0.0;
         bool m_ecuSettingsLoaded = false;
-
-        // Optional: learned dataset output (ENGINE_SIM_ECU_LEARN) and CSV
-        // datalog (ENGINE_SIM_ECU_LOG)
-        std::string m_ecuLearnPath;
-        double m_ecuLearnSaveTimer = 0.0;
 
         // Combustion analysis per cycle (ENGINE_SIM_INDI_LOG) and raw cylinder
         // pressure stream for the external indicating tool (ENGINE_SIM_INDI_UDP)
@@ -161,6 +151,19 @@ class EngineSimApplication {
 
     protected:
         CanInterface m_can;
+
+        // CAN protocol: the bench's (dyno_can.h, default) or AVL EMCON
+        // (ENGINE_SIM_CAN_PROTOCOL=emcon)
+        bool m_canEmcon = false;
+
+        // Engine commands of the automation in remote, from either protocol
+        bool m_remoteIgnition = false;
+        bool m_remoteStarter = false;
+        double m_remoteThrottle = 0.0;      // 0 .. 1
+
+        // Bench protocol: remote while ENGINE_Command keeps coming
+        double m_engineCommandAge = 1e9;    // [s]
+        int m_canTimeoutMs = 500;
 
         // Latest commands received from the HOST (AVL EMCON)
         avl_emcon::HostControl m_hostControl;
@@ -190,6 +193,16 @@ class EngineSimApplication {
         double m_canTorqueFilterTau = 0.0;  // [s]
         double m_canMeasuredTorque_Nm = 0.0;
         std::mt19937 m_canRng;
+
+        // Eddy current brake (default; ENGINE_SIM_DYNO_MODEL=ideal: ideal dyno): PWM from the brake
+        // controller's CAN protocol (dyno_can.h) or its internal controller.
+        // Optional CSV datalog (ENGINE_SIM_DYNO_LOG)
+        bool m_eddyDyno = false;
+        uint32_t m_dynoCanBaseId = dyno_can::DefaultBaseId;
+        bool m_dynoOverPower = false;
+        std::ofstream m_dynoLog;
+        double m_dynoLogTime = 0.0;
+        double m_dynoLogTimer = 0.0;
 
     protected:
         double m_speedSetting = 1.0;

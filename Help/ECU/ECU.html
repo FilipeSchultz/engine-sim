@@ -10,12 +10,12 @@
 <div class="conteudo">
 
   <h1>ECU virtual</h1>
-  <p class="subtitulo">Unidade de controle do motor com calibração DCM editável ao vivo</p>
+  <p class="subtitulo">Unidade de controle do motor, num programa próprio, com calibração DCM editável ao vivo</p>
 
   <table class="ficha">
-    <tr><td>Biblioteca</td><td><code>engine-sim-ecu</code> (pasta <code>ecu\</code>)</td></tr>
-    <tr><td>Lado da simulação</td><td><code>EcuHardware</code> (<code>src/ecu_hardware.cpp</code>), <code>EcuLearner</code> (<code>src/ecu_learner.cpp</code>)</td></tr>
-    <tr><td>Calibração ativa</td><td><code>assets/calibration/calibration.dcm</code></td></tr>
+    <tr><td>Programa</td><td><code>ecu-standalone.exe</code> (biblioteca <code>engine-sim-ecu</code>, pasta <code>ecu\</code>)</td></tr>
+    <tr><td>Lado da simulação</td><td><code>EcuHardware</code> (<code>src/ecu_hardware.cpp</code>): o controlador de I/O</td></tr>
+    <tr><td>Calibração ativa</td><td>O arquivo passado em <code>--cal</code>; no laboratório, <code>assets/calibration/calibration.dcm</code></td></tr>
   </table>
 
   <div class="cartao">
@@ -25,28 +25,26 @@
     <a href="Parametros.html">Parâmetros</a> &middot;
     <a href="Medicoes.html">Medições e datalog</a> &middot;
     <a href="Arquivo_DCM.html">Arquivo DCM</a> &middot;
-    <a href="Aprendizado.html">Aprendizado de mapas</a> &middot;
     <a href="Sensores.html">Sensores e atuadores</a> &middot;
+    <a href="ECU_Standalone.html">ECU standalone</a> &middot;
     <a href="Desenvolvimento.html">Estender a ECU</a>
   </div>
 
   <h2>Descrição</h2>
-  <p>A ECU é uma biblioteca separada, sem dependência da simulação: ela só conhece seus sensores, seus atuadores e sua
-     calibração, como uma ECU real numa bancada HIL. Controla <b>injeção nos pórticos</b> e <b>avanço de ignição</b>
-     a partir de mapas rpm × MAP, com correções por temperatura, controle de λ em malha fechada e limitador de rotação.</p>
+  <p>A ECU roda num programa próprio, o <code>ecu-standalone</code>, sem dependência da simulação: ela só conhece seus
+     sensores, seus atuadores e sua calibração, como uma ECU real numa bancada HIL. Controla <b>injeção nos pórticos</b> e
+     <b>avanço de ignição</b> a partir de mapas rpm × MAP, com correções por temperatura, controle de λ em malha fechada e
+     limitador de rotação. O simulador faz o papel do controlador de I/O (o microcontrolador de uma bancada real) e conversa
+     com ela por UDP. Veja <a href="ECU_Standalone.html">ECU standalone</a>.</p>
 
-<pre><code> engine-sim (planta)                      ecu/ (biblioteca)
-┌──────────────────────┐   EcuInputs    ┌──────────────────────────────────────────┐
-│ EcuHardware          │ ─────────────► │ Ecu::step()                              │
-│  modelos de sensor:  │                │  1. entradas → EcuSignals                │
-│  virabrequim/comando,│                │  2. tarefas: passo / 10 ms / 100 ms      │
-│  MAP, IAT, CLT, TPS, │                │     InputProcessing → EngineState →      │
-│  λ                   │                │     RevLimiter → LambdaControl →         │
-│                      │                │     FuelControl → IgnitionControl        │
-│  modelos de atuador: │   EcuOutputs   │  3. saída: pulso de injeção no ângulo    │
-│  injetores, avanço   │ ◄───────────── │     de cada cilindro, avanço de ignição  │
-└──────────────────────┘                └──────────────────────────────────────────┘
-                                          calibração (DCM)   medições (datalog)</code></pre>
+<pre><code> engine-sim (planta + controlador de I/O)       ecu-standalone (ECU)
+┌──────────────────────────────┐   amostras  ┌──────────────────────────────────┐
+│ EcuHardware                  │  a cada 10ms│ tarefas: InputProcessing →       │
+│  sensores: virabrequim, MAP, │ ──────────► │  EngineState → RevLimiter →      │
+│  IAT, CLT, TPS, λ            │   UDP 5600  │  LambdaControl → FuelControl →   │
+│  média de rpm e MAP por ciclo│   comando   │  IgnitionControl                 │
+│  injetores no ângulo, avanço │ ◄────────── │ calibração (DCM), XCP, datalog   │
+└──────────────────────────────┘             └──────────────────────────────────┘</code></pre>
 
   <h2>Ligar a ECU</h2>
   <p>A ECU roda sempre, mas só assume o motor quando os interruptores da calibração estão em 1:</p>
@@ -55,15 +53,19 @@
     <tr><td><code>EcuFuelEnable</code></td><td>Mistura definida pelo script do motor</td><td>Injeção pelo <code>FuelBaseMap</code> e correções</td></tr>
     <tr><td><code>EcuIgnEnable</code></td><td>Curva de avanço do script do motor</td><td>Avanço pelo <code>IgnAdvanceMap</code> e correções</td></tr>
   </table>
-  <p>Na primeira execução, se <code>calibration.dcm</code> não existir, o simulador grava um arquivo padrão com as duas
-     funções desligadas (o motor se comporta como o script).</p>
+  <p>Se o arquivo de calibração não existir, a ECU grava um arquivo padrão com as duas funções desligadas (o motor se
+     comporta como o script). Sem a ECU aberta, ou se ela parar de responder, o simulador também volta para o script
+     (fail-safe).</p>
 
   <h2>Uso típico</h2>
   <ol>
     <li>Copie o dataset do motor (<code>assets/calibration/datasets/&lt;motor&gt;.dcm</code>) sobre <code>calibration.dcm</code>.</li>
-    <li>Abra o simulador. A mensagem <code>ECU: calibration loaded (fuel ON, ignition ON)</code> confirma a leitura.</li>
-    <li>Edite <code>calibration.dcm</code> num editor de texto e salve: a ECU recarrega em até 0,5 s, com o motor funcionando.</li>
-    <li>Para registrar o que a ECU faz, use <code>ENGINE_SIM_ECU_LOG</code> (ver <a href="Medicoes.html">Medições e datalog</a>).</li>
+    <li>Abra a ECU: <code>ecu-standalone.exe --cal ..\..\..\assets\calibration\calibration.dcm</code> (de
+        <code>build\ecu\Release</code>). A janela mostra <i>Loaded</i> e <i>fuel ON, ignition ON</i>.</li>
+    <li>Abra o simulador. Na janela da ECU, <b>Engine link</b> fica verde.</li>
+    <li>Edite <code>calibration.dcm</code> num editor de texto e salve: a ECU recarrega em até 0,5 s, com o motor funcionando.
+        Ou calibre pelo VISION: o XCP já abre com a ECU (veja <a href="../Comunicacao/XCP_VISION.html">XCP com ATI VISION</a>).</li>
+    <li>Para registrar o que a ECU faz, use <code>--log</code> (ver <a href="Medicoes.html">Medições e datalog</a>).</li>
   </ol>
 
   <div class="aviso">
@@ -73,7 +75,7 @@
 
   <div class="dica">
     <b>Dica:</b> um arquivo inválido (sintaxe, valor fora dos limites, eixo não crescente) é rejeitado inteiro e a ECU
-    continua com a calibração anterior. Leia a mensagem no painel de informações para achar a linha.
+    continua com a calibração anterior. Leia a mensagem na janela da ECU para achar a linha.
   </div>
 
 </div>

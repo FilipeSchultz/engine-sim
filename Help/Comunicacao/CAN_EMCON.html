@@ -12,6 +12,13 @@
   <h1>Controle CAN (AVL EMCON)</h1>
   <p class="subtitulo">A automação do banco comanda motor e dinamômetro pelo protocolo de dinamômetro AVL EMCON</p>
 
+  <div class="aviso">
+    <b>Desligado por padrão:</b> o simulador usa o protocolo do banco de motores pequenos
+    (<a href="../Operacao/Freio_Correntes_Parasitas.html">Freio de correntes parasitas</a>). Para usar o EMCON,
+    defina <code>ENGINE_SIM_CAN_PROTOCOL=emcon</code> e, para o dinamômetro que segura rotação,
+    <code>ENGINE_SIM_DYNO_MODEL=ideal</code>.
+  </div>
+
   <table class="ficha">
     <tr><td>Protocolo</td><td>AVL Dyno EMCON v2.7 (<code>AVL_Dyno_EMCON_v2.7.dbc</code> na raiz do projeto)</td></tr>
     <tr><td>Interface</td><td>Kvaser CANlib (qualquer interface Kvaser ou o driver virtual)</td></tr>

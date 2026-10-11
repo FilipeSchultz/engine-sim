@@ -2,6 +2,7 @@
 #define ECU_HOST_H
 
 #include "ecu.h"
+#include "link.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -78,9 +79,6 @@ namespace ecu {
             double m_nextRow = 0.0;
             int m_logLines = 0;
     };
-
-    // "a.b.c.d" -> address; false if malformed
-    bool parseIpv4(const std::string &text, uint8_t address[4]);
 }
 
 #endif /* ECU_HOST_H */

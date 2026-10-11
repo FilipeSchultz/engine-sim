@@ -1,27 +1,21 @@
 #ifndef ATG_ENGINE_SIM_ECU_HARDWARE_H
 #define ATG_ENGINE_SIM_ECU_HARDWARE_H
 
-#include "ecu/ecu.h"
+#include "ecu/io.h"
 #include "ecu/link.h"
 
+#include <deque>
 #include <string>
 
 class Engine;
-class EcuLearner;
 
-// The ECU's electrical environment in the simulation, as on a HIL bench:
-// sensor models produce ecu::EcuInputs from the engine, actuator models carry
-// out ecu::EcuOutputs (port injectors, spark advance). This is the only code
-// that touches both the ECU and the engine.
-//
-// Two ways to run the ECU:
-//   - in this process (setEcu): stepped with the physics, as before
-//   - external (openLink): the ECU is ecu-standalone, over UDP (ecu/link.h).
-//     This class then plays the I/O controller, the microcontroller of a real
-//     bench: it averages rpm and MAP over each firing interval, sends a
-//     sample every 10 ms, fires the injectors at the commanded angle and cuts
-//     the ECU outputs (engine script mixture and timing) when no command came
-//     for 0.1 s.
+// The ECU's I/O controller, the microcontroller of a real bench, played by
+// the simulation. The ECU is ecu-standalone, reached over UDP (ecu/link.h).
+// Sensor models read the engine; every 10 ms a sample goes to the ECU, with
+// rpm and MAP averaged over the last firing interval; the ECU's command is
+// carried out: injectors fired at the commanded angle (the engine's own
+// injectors), spark advance. Without a command for 0.1 s the ECU outputs are
+// cut and the engine script's mixture and timing take over (fail-safe).
 class EcuHardware {
     public:
         struct LinkSettings {
@@ -36,26 +30,19 @@ class EcuHardware {
         };
 
         enum class LinkState {
-            Off,            // no link (ECU in the process, or none)
+            Off,            // link not open
             Waiting,        // no command received yet
             Connected,
             Lost            // commands stopped: fail-safe
         };
-
-        void setEcu(ecu::Ecu *ecu) { m_ecu = ecu; m_attached = nullptr; }
-        ecu::Ecu *getEcu() const { return m_ecu; }
-
-        // Optional: records the engine script's behaviour into ECU maps (ECU
-        // in the process only)
-        void setLearner(EcuLearner *learner) { m_learner = learner; }
 
         bool openLink(const LinkSettings &settings, std::string *error);
         bool linkOpen() const { return m_link.isOpen(); }
         LinkState linkState() const;
         const LinkSettings &linkSettings() const { return m_linkSettings; }
 
-        // Codes the ECU for the engine (cylinders, firing TDCs) and resets
-        // the sensors
+        // Takes the engine's cylinders and firing TDCs, resets the sensors
+        // and the link state
         void attach(Engine *engine);
 
         // Once per physics step, before ignition and gas flow
@@ -67,24 +54,20 @@ class EcuHardware {
         // MAP averaged over the last firing interval, as the ECU sees it
         double averagedMap_kPa() const;
 
-        // Sensor models
-        double m_coolantTemperature_C = 90.0;       // no thermal model yet
-        double m_lambdaTimeConstant_s = 0.1;        // wideband sensor response
+        // Sensor models (coolant and lambda sensor: engine script)
         double m_iatTimeConstant_s = 2.0;           // intake air thermistor
 
     private:
         void readSensors(Engine *engine, double dt);
+        void readLambdaSensor(Engine *engine, double dt);
         void driveActuators(Engine *engine);
 
-        // External ECU: the I/O controller's work
         void stepIoController(double dt);
         void averageInputs(double dt);
         void sendSample();
         void receiveCommands(int timeout_ms, bool untilAnswer);
         void scheduleInjections(double injection_ms, double injectionAngle_deg);
 
-        ecu::Ecu *m_ecu = nullptr;
-        EcuLearner *m_learner = nullptr;
         Engine *m_attached = nullptr;
         ecu::EcuConfig m_config;
 
@@ -92,11 +75,23 @@ class EcuHardware {
         ecu::EcuOutputs m_outputs;
 
         double m_time = 0;
-        double m_lambda = 0;
         double m_iat_C = 25;
         bool m_iatValid = false;
 
-        // External ECU
+        // Wideband lambda: exhaust gas on its way from the valves to the
+        // sensor (plug flow), tagged with the charge it was burned from
+        struct ExhaustParcel {
+            double volume;      // exhaust volume pushed out when it left [m3]
+            double o2;          // O2 and fuel of its charge [mol]
+            double fuel;
+        };
+        std::deque<ExhaustParcel> m_exhaustParcels;
+        double m_exhaustVolume = 0;         // exhaust volume pushed out so far [m3]
+        double m_sensorGas = 0;             // gas at the sensor, as 1 - 1/lambda
+        double m_sensorSignal = 0;          // sensor response, same scale
+        bool m_sensorReady = false;         // exhaust gas has reached the sensor
+
+        // Link
         ecu::link::UdpEndpoint m_link;
         LinkSettings m_linkSettings;
         ecu::link::Command m_command;

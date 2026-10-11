@@ -432,7 +432,7 @@ namespace {
         const EcuStatus &s = m_status;
         const std::wstring endpoint = widen(s.xcpEndpoint);
 
-        if (!s.xcpEnabled) return { Gray, L"Off", L"start with --xcp to calibrate with VISION / CANape" };
+        if (!s.xcpEnabled) return { Gray, L"Off", L"--no-xcp, or a build without ECU_XCP_ENABLED" };
         if (s.state == EcuStatus::State::Starting) return { Gray, L"Starting", endpoint };
         if (!s.xcpRunning) {
             return { Red, L"Not running", endpoint.empty() ? L"see the messages" : endpoint + L"  |  see the messages" };

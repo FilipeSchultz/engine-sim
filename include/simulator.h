@@ -6,6 +6,7 @@
 #include "vehicle.h"
 #include "synthesizer.h"
 #include "dynamometer.h"
+#include "eddy_current_brake.h"
 #include "starter_motor.h"
 #include "derivative_filter.h"
 #include "vehicle_drag_constraint.h"
@@ -91,6 +92,9 @@ public:
 
     Dynamometer m_dyno;
     StarterMotor m_starterMotor;
+
+    // Eddy current brake model, used when m_dyno.m_eddyCurrent is set
+    EddyCurrentBrake m_brake;
 
 protected:
     void initializeSynthesizer();

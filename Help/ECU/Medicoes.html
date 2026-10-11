@@ -10,13 +10,13 @@
 <div class="conteudo">
 
   <h1>Medições e datalog</h1>
-  <p class="subtitulo">Variáveis internas da ECU gravadas em CSV pelo ENGINE_SIM_ECU_LOG</p>
+  <p class="subtitulo">Variáveis internas da ECU gravadas em CSV pelo ecu-standalone (--log)</p>
 
   <h2>Ligar o datalog</h2>
-<pre><code>set ENGINE_SIM_ECU_LOG=C:\temp\ecu.csv</code></pre>
-  <p>O arquivo recebe uma linha a cada 50 ms (20 Hz), com a coluna <code>time_s</code>, todas as medições registradas
-     pelas funções da ECU e, no fim, valores da planta que a ECU não enxerga. O arquivo é descarregado em disco a cada
-     20 linhas, então continua utilizável mesmo se o simulador for fechado à força.</p>
+<pre><code>ecu-standalone.exe --cal ... --log C:\temp\ecu.csv</code></pre>
+  <p>O arquivo recebe uma linha a cada 50 ms (20 Hz) de tempo da ECU, com a coluna <code>time_s</code> e todas as medições
+     registradas pelas funções da ECU. É descarregado em disco a cada 20 linhas, então continua utilizável mesmo se a ECU
+     for fechada à força. A linha <b>Datalog</b> da janela da ECU mostra se está gravando.</p>
 
   <h2>Medições da ECU</h2>
   <table>
@@ -50,18 +50,23 @@
   <p>A ordem das colunas segue a ordem de execução das funções. Uma medição nova adicionada no código aparece
      automaticamente no datalog.</p>
 
-  <h2>Valores da planta (últimas colunas)</h2>
+  <h2>Valores da planta: datalog do simulador</h2>
+  <p>O que a ECU não enxerga fica no datalog do simulador, <code>ENGINE_SIM_ECU_LOG</code>, gravado pelo controlador de I/O
+     a 20 Hz: estado do link (<code>link_state</code>: 0 desligado, 1 esperando, 2 conectado, 3 perdido), rotação e MAP
+     enviados, λ do sensor, comando aplicado (<code>fuel_ecu</code>, <code>injection_ms</code>,
+     <code>injection_angle_deg</code>, <code>ignition_ecu</code>, <code>advance_deg</code>) e:</p>
   <table>
     <tr><th>Coluna</th><th>Descrição</th></tr>
     <tr><td><code>intake_afr</code></td><td>AFR no coletor de admissão (com injeção no pórtico, o coletor só tem ar)</td></tr>
     <tr><td><code>cylinder_lambda</code></td><td>λ real no cilindro</td></tr>
     <tr><td><code>throttle_percent</code></td><td>Pedal (comando do acelerador) em %</td></tr>
     <tr><td><code>dyno_torque_Nm</code></td><td>Torque do dinamômetro, filtrado</td></tr>
+    <tr><td><code>wall_film_mg</code></td><td>Combustível no filme da parede dos pórticos, soma dos cilindros [mg]</td></tr>
   </table>
 
   <div class="dica">
-    <b>Dica:</b> para conferir o mapa de combustível, compare <code>lambda_sensor</code> (o que a ECU vê, com atraso de 0,1 s)
-    com <code>cylinder_lambda</code> (o valor real) num ponto estacionário.
+    <b>Dica:</b> para conferir o mapa de combustível, compare <code>lambda_sensor</code> (o que a ECU vê, com atraso de transporte e da sonda)
+    com <code>cylinder_lambda</code> (o valor real) num ponto estacionário, no datalog do simulador.
   </div>
 
   <div class="pendente">Complete: ferramenta usada no laboratório para ver o datalog (Excel, Python, Concerto…) e um modelo de
